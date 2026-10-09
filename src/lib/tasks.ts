@@ -2,6 +2,12 @@ import type { Task } from '../types'
 
 export interface TaskFilters { query: string; priority: string; module: string; deadline: string; sort: string }
 export type TaskScope = 'today' | 'week' | 'backlog' | 'all'
+export function formatTime(time: string): string {
+  if (!/^\d{2}:\d{2}$/.test(time)) return ''
+  const [hours, minutes] = time.split(':').map(Number)
+  if (hours > 23 || minutes > 59) return ''
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`
+}
 export function addDays(date: string, days: number): string {
   const value = new Date(`${date}T12:00:00`)
   value.setDate(value.getDate() + days)
@@ -24,5 +30,5 @@ export function filterTasks(tasks: Task[], filters: TaskFilters, today = localDa
     (!filters.priority || task.priority === filters.priority) &&
     (!filters.module || task.module === filters.module) &&
     (!filters.deadline || (task.status !== 'done' && task.dueDate && (filters.deadline === 'overdue' ? task.dueDate < today : task.dueDate === today))),
-  ).sort((a, b) => filters.sort === 'priority' ? priorities[a.priority] - priorities[b.priority] : filters.sort === 'due' ? (a.dueDate || '9999').localeCompare(b.dueDate || '9999') : filters.sort === 'title' ? a.title.localeCompare(b.title) : b.createdAt.localeCompare(a.createdAt))
+  ).sort((a, b) => filters.sort === 'scheduled' ? `${a.plannedDate || '9999'}T${a.plannedTime || '23:59'}`.localeCompare(`${b.plannedDate || '9999'}T${b.plannedTime || '23:59'}`) : filters.sort === 'priority' ? priorities[a.priority] - priorities[b.priority] : filters.sort === 'due' ? (a.dueDate || '9999').localeCompare(b.dueDate || '9999') : filters.sort === 'title' ? a.title.localeCompare(b.title) : b.createdAt.localeCompare(a.createdAt))
 }

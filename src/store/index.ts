@@ -152,6 +152,7 @@ export const useStore = create<DevBoardState>()(
           module: input.module ?? '',
           dueDate: input.dueDate ?? '',
           plannedDate: input.plannedDate ?? '',
+          plannedTime: input.plannedDate ? input.plannedTime ?? '' : '',
           tags: input.tags ?? [],
           subtasks: input.subtasks ?? [],
           createdAt: timestamp,

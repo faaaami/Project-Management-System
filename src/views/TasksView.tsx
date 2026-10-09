@@ -7,7 +7,8 @@ import { useStore } from '../store'
 import type { Task, TaskStatus } from '../types'
 import { Select } from '../components/Select'
 import { TaskEditor } from '../components/TaskEditor'
-import { addDays, filterTasks, localDateKey, scopeTasks } from '../lib/tasks'
+import { SchedulePicker } from '../components/SchedulePicker'
+import { addDays, filterTasks, formatTime, localDateKey, scopeTasks } from '../lib/tasks'
 import type { TaskScope } from '../lib/tasks'
 import {
   PRIORITY_CLASS,
@@ -128,7 +129,7 @@ function TaskCard({ task, handle, preview = false }: { task: Task; handle?: Reac
       {task.dueDate && (
         <p className={`task-due ${task.status !== 'done' && task.dueDate < localDateKey() ? 'overdue' : ''}`}>{task.status !== 'done' && task.dueDate < localDateKey() ? 'Overdue · ' : 'Due '}{new Date(`${task.dueDate}T00:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</p>
       )}
-      {task.plannedDate && <p className="task-planned">Planned {new Date(`${task.plannedDate}T12:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</p>}
+      {task.plannedDate && <p className="task-planned">Planned {new Date(`${task.plannedDate}T12:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' })}{task.plannedTime ? ` at ${formatTime(task.plannedTime)}` : ' · Any time'}</p>}
       {task.tags.length > 0 && <div className="task-tags">{task.tags.map(tag => <span key={tag}>#{tag}</span>)}</div>}
       {editing && <TaskEditor task={task} onClose={() => setEditing(false)} />}
     </article>
@@ -142,16 +143,20 @@ function AddTaskForm({ plannedDate }: { plannedDate: string }) {
   )
   const [title, setTitle] = useState('')
   const [creating, setCreating] = useState(false)
+  const [date, setDate] = useState(plannedDate)
+  const [time, setTime] = useState('')
+  const [feedback, setFeedback] = useState('')
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!title.trim() || !project) return
-    addTask({ title, module: project?.modules[0] ?? '', plannedDate })
+    addTask({ title, module: project?.modules[0] ?? '', plannedDate: date, plannedTime: date ? time : '' })
+    setFeedback(date ? `Task scheduled for ${date}${time ? ' at ' + formatTime(time) : ''}. Find it in the five-week plan or All tasks.` : 'Task added to Backlog.')
     setTitle('')
   }
 
   return (
-    <form onSubmit={submit} className="entry-form flex gap-2">
+    <form onSubmit={submit} className="entry-form quick-schedule-form flex gap-2">
       <label className="sr-only" htmlFor="new-task">Task title</label>
       <input
         id="new-task"
@@ -168,7 +173,7 @@ function AddTaskForm({ plannedDate }: { plannedDate: string }) {
         Add
       </button>
       <button type="button" className="secondary-action" onClick={() => setCreating(true)}>Add details</button>
-      {creating && <TaskEditor defaultPlannedDate={plannedDate} onClose={() => setCreating(false)} />}
+      <SchedulePicker date={date} time={time} onDateChange={setDate} onTimeChange={setTime} /><p className="schedule-feedback" role="status">{feedback}</p>{creating && <TaskEditor defaultPlannedDate={date} defaultPlannedTime={time} defaultTitle={title} onClose={() => setCreating(false)} />}
     </form>
   )
 }
@@ -182,7 +187,7 @@ export function TasksView() {
   const [priority, setPriority] = useState('')
   const [module, setModule] = useState('')
   const [deadline, setDeadline] = useState('')
-  const [sort, setSort] = useState('newest')
+  const [sort, setSort] = useState('scheduled')
   const [layout, setLayout] = useState('board')
   const [scope, setScope] = useState<TaskScope>('today')
   const [showCompleted, setShowCompleted] = useState(false)
@@ -246,10 +251,10 @@ export function TasksView() {
       <div className="planner-navigation" aria-label="Task time view">{([['today', 'Today'], ['week', '5-week plan'], ['backlog', 'Backlog'], ['all', 'All tasks']] as const).map(([value, label]) => <button key={value} aria-pressed={scope === value} onClick={() => changeScope(value)}>{label}<span>{value === 'today' ? pending.filter(t => t.plannedDate === today).length : value === 'backlog' ? pending.filter(t => !t.plannedDate).length : value === 'all' ? projectTasks.length : ''}</span></button>)}</div>
       <section className="planner-heading"><div><h2>{scope === 'today' ? 'Focus on today' : scope === 'week' ? `Week ${week}` : scope === 'backlog' ? 'Your unscheduled ideas' : 'Project history'}</h2><p>{scope === 'today' ? `${new Date(`${today}T12:00:00`).toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })} · Only tasks planned for today` : scope === 'week' ? `${weekStart} to ${addDays(weekStart, 6)} · Set your plan’s start date in Manage project` : scope === 'backlog' ? 'Open a task to choose a planned work day. Deadlines are tracked separately.' : 'Every task, including completed work. Search here whenever you need it.'}</p></div>{scope !== 'all' && <label className="completed-toggle"><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} />Show completed</label>}</section>
       {scope === 'week' && <div className="week-picker">{[1, 2, 3, 4, 5].map(value => <button key={value} aria-pressed={week === value} onClick={() => { setWeek(value); setNewDay(addDays(startDate, (value - 1) * 7)) }}>Week {value}</button>)}<label>New tasks for<input type="date" value={selectedDay} min={weekStart} max={addDays(weekStart, 6)} onChange={e => setNewDay(e.target.value)} required /></label></div>}
-      <AddTaskForm plannedDate={plannedDate} />
-      <p className="planner-add-hint">{plannedDate ? `New tasks are scheduled for ${plannedDate}.` : 'New tasks go to Backlog until you choose a work day.'}</p>
+      <AddTaskForm key={plannedDate} plannedDate={plannedDate} />
+      
       <div className="task-toolbar"><label className="search-field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input aria-label="Search tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tasks, tags, or descriptions" /></label><div className="view-toggle" aria-label="Task view"><button aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>Board</button><button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</button></div></div>
-      <div className="task-filters"><Select label="Filter priority" value={priority} onChange={setPriority} options={[{ value: '', label: 'All priorities' }, ...Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))]} /><Select label="Filter module" value={module} onChange={setModule} options={[{ value: '', label: 'All modules' }, ...modules.map(value => ({ value, label: value }))]} /><Select label="Filter deadlines" value={deadline} onChange={setDeadline} options={[{ value: '', label: 'All deadlines' }, { value: 'overdue', label: 'Overdue', color: '#d4665c' }, { value: 'today', label: 'Due today', color: '#d9a546' }]} /><Select label="Sort tasks" value={sort} onChange={setSort} options={[{ value: 'newest', label: 'Newest first' }, { value: 'priority', label: 'Priority first' }, { value: 'due', label: 'Due date' }, { value: 'title', label: 'Title A–Z' }]} />{(query || priority || module || deadline) && <button className="text-action" onClick={() => { setQuery(''); setPriority(''); setModule(''); setDeadline('') }}>Clear filters</button>}<span className="result-count">{filtered.length} of {projectTasks.length} tasks</span></div>
+      <div className="task-filters"><Select label="Filter priority" value={priority} onChange={setPriority} options={[{ value: '', label: 'All priorities' }, ...Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))]} /><Select label="Filter module" value={module} onChange={setModule} options={[{ value: '', label: 'All modules' }, ...modules.map(value => ({ value, label: value }))]} /><Select label="Filter deadlines" value={deadline} onChange={setDeadline} options={[{ value: '', label: 'All deadlines' }, { value: 'overdue', label: 'Overdue', color: '#d4665c' }, { value: 'today', label: 'Due today', color: '#d9a546' }]} /><Select label="Sort tasks" value={sort} onChange={setSort} options={[{ value: 'scheduled', label: 'Scheduled time' }, { value: 'newest', label: 'Newest first' }, { value: 'priority', label: 'Priority first' }, { value: 'due', label: 'Due date' }, { value: 'title', label: 'Title A–Z' }]} />{(query || priority || module || deadline) && <button className="text-action" onClick={() => { setQuery(''); setPriority(''); setModule(''); setDeadline('') }}>Clear filters</button>}<span className="result-count">{filtered.length} of {projectTasks.length} tasks</span></div>
       {layout === 'board' && <details className="board-instructions"><summary>How to move tasks</summary>Drag the six-dot handle to another stage. Keyboard: Space to pick up, arrow keys to move, Space to drop, Esc to cancel.</details>}
       <p className="sr-only" role="status">{announcement}</p>
       {scope === 'today' && overdue.length > 0 && <details className="overdue-section"><summary>Overdue work <span>{overdue.length}</span><small>Expand when you’re ready to catch up</small></summary><div className="overdue-items">{overdue.map(task => <div key={task.id}><button className="task-title-button" onClick={() => { setScope('all'); setQuery(task.title); setPriority(''); setModule(''); setDeadline('') }}>{task.title}</button><span>{task.plannedDate && task.plannedDate < today ? `Planned ${task.plannedDate}` : `Deadline ${task.dueDate}`}</span>{task.plannedDate !== today && <button className="secondary-action" onClick={() => updateTask(task.id, { plannedDate: today })}>Move to today</button>}</div>)}</div></details>}

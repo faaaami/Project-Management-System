@@ -19,6 +19,7 @@ export interface Task {
   module: string
   dueDate: string
   plannedDate?: string
+  plannedTime?: string
   tags: string[]
   subtasks: Subtask[]
   createdAt: string

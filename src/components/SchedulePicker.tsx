@@ -1,0 +1,6 @@
+import { addDays, localDateKey } from '../lib/tasks'
+
+export function SchedulePicker({ date, time, onDateChange, onTimeChange }: { date: string; time: string; onDateChange: (date: string) => void; onTimeChange: (time: string) => void }) {
+  const today = localDateKey()
+  return <fieldset className="schedule-picker"><legend>Schedule work</legend><div className="schedule-inputs"><label>Assignment date<input type="date" value={date} onChange={e => { onDateChange(e.target.value); if (!e.target.value) onTimeChange('') }} /></label><label>Time <span className="optional-label">(optional)</span><input type="time" value={time} disabled={!date} onChange={e => onTimeChange(e.target.value)} /></label></div><div className="schedule-shortcuts">{[['Today', today], ['Tomorrow', addDays(today, 1)], ['Next week', addDays(today, 7)]].map(([label, value]) => <button key={label} type="button" aria-pressed={date === value} onClick={() => onDateChange(value)}>{label}</button>)}<button type="button" onClick={() => { onDateChange(''); onTimeChange('') }}>Backlog</button></div><p className="field-help">{date ? 'Times use your device’s local time. Choose any date to plan ahead.' : 'Choose a day to set a time, or leave unscheduled in Backlog.'}</p></fieldset>
+}

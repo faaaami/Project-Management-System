@@ -5,7 +5,7 @@ import ts from 'typescript'
 
 const source = readFileSync(new URL('../src/lib/tasks.ts', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText
-const { filterTasks, localDateKey, scopeTasks, addDays } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+const { filterTasks, localDateKey, scopeTasks, addDays, formatTime } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 const task = (id, overrides = {}) => ({ id, title: 'Build API', description: 'Authentication flow', module: 'Backend', tags: ['security'], priority: 'medium', status: 'todo', dueDate: '', createdAt: '2026-10-01', ...overrides })
 const defaults = { query: '', priority: '', module: '', deadline: '', sort: 'newest' }
 
@@ -48,4 +48,17 @@ test('legacy tasks remain in backlog and completed tasks stay in history', () =>
   const tasks = [task('legacy'), task('done', { status: 'done' }), task('scheduled', { plannedDate: '2026-11-01' })]
   assert.deepEqual(scopeTasks(tasks, 'backlog', '2026-10-09', '2026-10-01', 1, false).map(t => t.id), ['legacy'])
   assert.deepEqual(scopeTasks(tasks, 'all', '2026-10-09', '2026-10-01', 1, true).map(t => t.id), ['legacy', 'done', 'scheduled'])
+})
+
+test('scheduled sorting respects day and time and puts backlog last', () => {
+  const tasks = [task('later', { plannedDate: '2026-10-09', plannedTime: '15:00' }), task('backlog'), task('next-week', { plannedDate: '2026-10-16', plannedTime: '08:00' }), task('morning', { plannedDate: '2026-10-09', plannedTime: '09:30' }), task('anytime', { plannedDate: '2026-10-09' })]
+  assert.deepEqual(filterTasks(tasks, { ...defaults, sort: 'scheduled' }).map(t => t.id), ['morning', 'later', 'anytime', 'next-week', 'backlog'])
+  assert.deepEqual(scopeTasks(tasks, 'today', '2026-10-09', '2026-10-09', 1, false).map(t => t.id), ['later', 'morning', 'anytime'])
+})
+test('time labels handle midnight, noon, and invalid values', () => {
+  assert.equal(formatTime('00:00'), '12:00 AM')
+  assert.equal(formatTime('12:00'), '12:00 PM')
+  assert.equal(formatTime('15:30'), '3:30 PM')
+  assert.equal(formatTime('24:60'), '')
+  assert.equal(formatTime(''), '')
 })

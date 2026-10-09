@@ -261,6 +261,24 @@ main .task-card { padding-top: 24px; }
 .week-picker input { padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--canvas); color: var(--ink); }
 .planner-add-hint { font-size: 11px; color: var(--muted); margin-top: -12px; }
 .task-planned { font-size: 11px; color: var(--accent); margin-top: 8px; }
+.schedule-picker { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--canvas); }
+.schedule-picker legend { font-size: 12px; font-weight: 600; padding: 0 6px; color: var(--ink); }
+.schedule-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.schedule-inputs label { display: flex; flex-direction: column; gap: 7px; font-size: 11px; color: var(--muted); }
+.schedule-inputs input { min-height: 42px; width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.schedule-inputs input:disabled { opacity: .5; cursor: not-allowed; }
+.optional-label { display: inline; font-size: 10px; }
+.schedule-shortcuts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.schedule-shortcuts button { min-height: 34px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 11px; }
+.schedule-shortcuts button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.schedule-picker .field-help { margin-top: 10px; }
+.form-grid > .schedule-picker { grid-column: 1 / -1; }
+.quick-schedule-form { flex-wrap: wrap; }
+.quick-schedule-form > .schedule-picker { width: 100%; margin-top: 8px; }
+.quick-schedule-form .schedule-shortcuts button { background: var(--surface); padding-inline: 12px; min-height: 34px; }
+.quick-schedule-form .schedule-shortcuts button[aria-pressed='true'] { background: var(--accent-soft); }
+.schedule-feedback { width: 100%; color: var(--accent); font-size: 12px; line-height: 1.7; }
+.schedule-feedback:empty { display: none; }
 .overdue-section { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .overdue-section summary { padding: 16px 18px; cursor: pointer; font-size: 12px; font-weight: 600; }
 .overdue-section summary > span { background: var(--accent-soft); color: var(--accent); margin-left: 8px; padding: 3px 7px; border-radius: 5px; }
