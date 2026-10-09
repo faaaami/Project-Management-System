@@ -16,7 +16,7 @@ export function Sidebar({ view, onSelectView }: SidebarProps) {
   const activeProjectId = useStore((state) => state.activeProjectId)
 
   const openTaskCount = tasks.filter(
-    (task) => task.projectId === activeProjectId && task.status !== 'done',
+    (task) => task.projectId === activeProjectId && task.status !== 'done' && !task.archived,
   ).length
 
   return (

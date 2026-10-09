@@ -1,72 +1,30 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, useDraggable, useDroppable, pointerWithin, rectIntersection } from '@dnd-kit/core'
-import type { DragEndEvent, KeyboardCoordinateGetter, CollisionDetection } from '@dnd-kit/core'
+import type { FormEvent } from 'react'
 import { useStore } from '../store'
-import type { Task, TaskStatus } from '../types'
+import type { Task } from '../types'
 import { Select } from '../components/Select'
 import { TaskEditor } from '../components/TaskEditor'
+import { TrelloBoard } from '../components/TrelloBoard'
+import { boardLists, taskListId } from '../lib/board'
 import { SchedulePicker } from '../components/SchedulePicker'
 import { addDays, filterTasks, formatTime, localDateKey, scopeTasks } from '../lib/tasks'
 import type { TaskScope } from '../lib/tasks'
 import {
   PRIORITY_CLASS,
   PRIORITY_LABEL,
-  STATUS_DOT,
   STATUS_LABEL,
-  STATUS_ORDER,
   TYPE_CLASS,
   TYPE_LABEL,
 } from '../lib/ui'
 
-const stageCollision: CollisionDetection = (args) => {
-  if (args.pointerCoordinates) return pointerWithin(args)
-  return rectIntersection(args)
-}
-
-const stageCoordinates: KeyboardCoordinateGetter = (event, { currentCoordinates, context }) => {
-  const directions: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
-  const direction = directions[event.code]
-  if (!direction || !context.collisionRect) return
-  event.preventDefault()
-  const current = context.over?.id ?? context.active?.data.current?.status
-  const index = STATUS_ORDER.indexOf(current as TaskStatus)
-  const next = STATUS_ORDER[index + direction]
-  const target = next && context.droppableRects.get(next)
-  if (!target) return
-  return {
-    x: currentCoordinates.x + target.left + target.width / 2 - context.collisionRect.left - context.collisionRect.width / 2,
-    y: currentCoordinates.y + target.top + target.height / 2 - context.collisionRect.top - context.collisionRect.height / 2,
-  }
-}
-
-function DraggableTask({ task }: { task: Task }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id: task.id, data: { status: task.status } })
-  return <div ref={setNodeRef} className={`draggable-task ${isDragging ? 'is-dragging' : ''}`}>
-    <TaskCard task={task} handle={<button ref={setActivatorNodeRef} {...attributes} {...listeners} className="task-drag-handle" aria-label={`Move ${task.title}`} title="Drag to another stage"><svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">{[6, 10, 14].flatMap(y => [5, 11].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.2" />))}</svg></button>} />
-  </div>
-}
-
-function Stage({ status, tasks, dragging }: { status: TaskStatus; tasks: Task[]; dragging: boolean }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status })
-  return <section ref={setNodeRef} aria-label={`${STATUS_LABEL[status]} stage`} className={`kanban-column flex flex-col gap-2 ${dragging ? 'drop-enabled' : ''} ${isOver ? 'drop-active' : ''}`}>
-    <h3 className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"><span aria-hidden="true" className={`size-2 rounded-full ${STATUS_DOT[status]}`} />{STATUS_LABEL[status]}<span className="text-slate-400">({tasks.length})</span></h3>
-    <div className="flex flex-col gap-2">
-      {tasks.map(task => <DraggableTask key={task.id} task={task} />)}
-      {tasks.length === 0 && <p className="stage-empty">{dragging ? 'Drop a task here' : 'No tasks here yet'}</p>}
-    </div>
-    {dragging && tasks.length > 0 && <div className="stage-drop-hint">{isOver ? `Move to ${STATUS_LABEL[status]}` : 'Drop here'}</div>}
-  </section>
-}
-
-function TaskCard({ task, handle, preview = false }: { task: Task; handle?: ReactNode; preview?: boolean }) {
+function TaskCard({ task, preview = false }: { task: Task; preview?: boolean }) {
   const updateTask = useStore((state) => state.updateTask)
   const [editing, setEditing] = useState(false)
+  const project = useStore(state => state.projects.find(p => p.id === task.projectId))
+  const lists = boardLists(project)
 
   return (
     <article className={`task-card rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${preview ? 'task-preview' : ''}`}>
-      {handle}
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">
           {preview ? task.title : <button type="button" className="task-title-button" onClick={() => setEditing(true)}>{task.title}</button>}
@@ -118,10 +76,10 @@ function TaskCard({ task, handle, preview = false }: { task: Task; handle?: Reac
         </label>
         <Select
           id={`status-${task.id}`}
-          value={task.status}
+          value={taskListId(task, lists)}
           label="Move to stage"
-          onChange={value => updateTask(task.id, { status: value as TaskStatus })}
-          options={STATUS_ORDER.map(value => ({ value, label: STATUS_LABEL[value], color: { todo: '#94a3b8', doing: '#6385ec', review: '#d9a546', done: '#39a886' }[value] }))}
+          onChange={value => updateTask(task.id, { listId: value, status: lists.find(list => list.id === value)!.status })}
+          options={lists.map(list => ({ value: list.id, label: list.title }))}
         />
       </div>}
       {preview && <div className="task-preview-status">{STATUS_LABEL[task.status]}</div>}
@@ -205,32 +163,8 @@ export function TasksView() {
     window.addEventListener('focus', refresh)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [announcement, setAnnouncement] = useState('')
-  const [reducedMotion, setReducedMotion] = useState(false)
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReducedMotion(media.matches)
-    sync()
-    media.addEventListener('change', sync)
-    return () => media.removeEventListener('change', sync)
-  }, [])
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: stageCoordinates }),
-  )
-  const activeTask = tasks.find(task => task.id === activeId && task.projectId === activeProjectId)
-  const finishDrag = ({ active, over }: DragEndEvent) => {
-    const task = tasks.find(item => item.id === active.id && item.projectId === activeProjectId)
-    if (task && over && STATUS_ORDER.includes(over.id as TaskStatus) && task.status !== over.id) {
-      updateTask(task.id, { status: over.id as TaskStatus })
-      setAnnouncement(`${task.title} moved to ${STATUS_LABEL[over.id as TaskStatus]}.`)
-    }
-    setActiveId(null)
-  }
 
-  const projectTasks = tasks.filter(t => t.projectId === activeProjectId)
+  const projectTasks = tasks.filter(t => t.projectId === activeProjectId && !t.archived)
   const modules = [...new Set([...(projects.find(p => p.id === activeProjectId)?.modules ?? []), ...projectTasks.map(task => task.module).filter(Boolean)])]
   const matching = filterTasks(projectTasks, { query, priority, module, deadline, sort }, today)
   const filtered = scopeTasks(matching, scope, today, startDate, week, scope === 'all' || showCompleted)
@@ -238,33 +172,20 @@ export function TasksView() {
   const pending = projectTasks.filter(task => task.status !== 'done')
   const plannedDate = scope === 'today' ? today : scope === 'week' ? selectedDay : ''
   const changeScope = (next: TaskScope) => { setScope(next); setDeadline(''); setShowCompleted(false); if (next === 'week') setNewDay(weekStart) }
-  const grouped = STATUS_ORDER.reduce<Record<TaskStatus, Task[]>>(
-      (acc, status) => {
-        acc[status] = filtered.filter((t) => t.status === status)
-        return acc
-      },
-      { todo: [], doing: [], review: [], done: [] },
-    )
 
   return (
     <div className="flex flex-col gap-4">
       <div className="planner-navigation" aria-label="Task time view">{([['today', 'Today'], ['week', '5-week plan'], ['backlog', 'Backlog'], ['all', 'All tasks']] as const).map(([value, label]) => <button key={value} aria-pressed={scope === value} onClick={() => changeScope(value)}>{label}<span>{value === 'today' ? pending.filter(t => t.plannedDate === today).length : value === 'backlog' ? pending.filter(t => !t.plannedDate).length : value === 'all' ? projectTasks.length : ''}</span></button>)}</div>
       <section className="planner-heading"><div><h2>{scope === 'today' ? 'Focus on today' : scope === 'week' ? `Week ${week}` : scope === 'backlog' ? 'Your unscheduled ideas' : 'Project history'}</h2><p>{scope === 'today' ? `${new Date(`${today}T12:00:00`).toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })} · Only tasks planned for today` : scope === 'week' ? `${weekStart} to ${addDays(weekStart, 6)} · Set your plan’s start date in Manage project` : scope === 'backlog' ? 'Open a task to choose a planned work day. Deadlines are tracked separately.' : 'Every task, including completed work. Search here whenever you need it.'}</p></div>{scope !== 'all' && <label className="completed-toggle"><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} />Show completed</label>}</section>
       {scope === 'week' && <div className="week-picker">{[1, 2, 3, 4, 5].map(value => <button key={value} aria-pressed={week === value} onClick={() => { setWeek(value); setNewDay(addDays(startDate, (value - 1) * 7)) }}>Week {value}</button>)}<label>New tasks for<input type="date" value={selectedDay} min={weekStart} max={addDays(weekStart, 6)} onChange={e => setNewDay(e.target.value)} required /></label></div>}
-      <AddTaskForm key={plannedDate} plannedDate={plannedDate} />
+      <details className="quick-add-disclosure"><summary>＋ Create a card with date and time</summary><AddTaskForm key={plannedDate} plannedDate={plannedDate} /></details>
       
       <div className="task-toolbar"><label className="search-field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input aria-label="Search tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tasks, tags, or descriptions" /></label><div className="view-toggle" aria-label="Task view"><button aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>Board</button><button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</button></div></div>
       <div className="task-filters"><Select label="Filter priority" value={priority} onChange={setPriority} options={[{ value: '', label: 'All priorities' }, ...Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))]} /><Select label="Filter module" value={module} onChange={setModule} options={[{ value: '', label: 'All modules' }, ...modules.map(value => ({ value, label: value }))]} /><Select label="Filter deadlines" value={deadline} onChange={setDeadline} options={[{ value: '', label: 'All deadlines' }, { value: 'overdue', label: 'Overdue', color: '#d4665c' }, { value: 'today', label: 'Due today', color: '#d9a546' }]} /><Select label="Sort tasks" value={sort} onChange={setSort} options={[{ value: 'scheduled', label: 'Scheduled time' }, { value: 'newest', label: 'Newest first' }, { value: 'priority', label: 'Priority first' }, { value: 'due', label: 'Due date' }, { value: 'title', label: 'Title A–Z' }]} />{(query || priority || module || deadline) && <button className="text-action" onClick={() => { setQuery(''); setPriority(''); setModule(''); setDeadline('') }}>Clear filters</button>}<span className="result-count">{filtered.length} of {projectTasks.length} tasks</span></div>
-      {layout === 'board' && <details className="board-instructions"><summary>How to move tasks</summary>Drag the six-dot handle to another stage. Keyboard: Space to pick up, arrow keys to move, Space to drop, Esc to cancel.</details>}
-      <p className="sr-only" role="status">{announcement}</p>
+      {layout === 'board' && <details className="board-instructions"><summary>How to move tasks</summary>Drag a card with its handle to reorder it or move it to another list. Keyboard: Space to pick up, arrows to move, Space to drop, Escape to cancel.</details>}
       {scope === 'today' && overdue.length > 0 && <details className="overdue-section"><summary>Overdue work <span>{overdue.length}</span><small>Expand when you’re ready to catch up</small></summary><div className="overdue-items">{overdue.map(task => <div key={task.id}><button className="task-title-button" onClick={() => { setScope('all'); setQuery(task.title); setPriority(''); setModule(''); setDeadline('') }}>{task.title}</button><span>{task.plannedDate && task.plannedDate < today ? `Planned ${task.plannedDate}` : `Deadline ${task.dueDate}`}</span>{task.plannedDate !== today && <button className="secondary-action" onClick={() => updateTask(task.id, { plannedDate: today })}>Move to today</button>}</div>)}</div></details>}
-      <DndContext key={activeProjectId} sensors={sensors} collisionDetection={stageCollision} onDragStart={({ active }) => { setActiveId(String(active.id)); setAnnouncement('') }} onDragEnd={finishDrag} onDragCancel={() => setActiveId(null)} accessibility={{ screenReaderInstructions: { draggable: 'Press Space to pick up a task. Use arrow keys to choose a stage. Press Space to drop or Escape to cancel.' } }}>
-        {layout === 'board' ? <div className="kanban-board grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {STATUS_ORDER.map(status => <Stage key={status} status={status} tasks={grouped[status]} dragging={!!activeTask} />)}
-        </div> : <div className="task-list-view">{filtered.map(task => <TaskCard key={task.id} task={task} />)}</div>}
-        {filtered.length === 0 && <div className="empty-state"><h3>{scope === 'today' ? 'Your day is clear' : scope === 'week' ? 'Room to plan this week' : 'No tasks in this view'}</h3><p>{scope === 'today' ? 'Add a task for today, or schedule one from Backlog. Completed tasks stay in All tasks.' : 'Add a task above, adjust your filters, or open All tasks to see your history.'}</p>{scope === 'today' && <button className="secondary-action" onClick={() => changeScope('backlog')}>Plan from Backlog</button>}</div>}
-        {createPortal(<DragOverlay dropAnimation={reducedMotion ? null : { duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }} transition={reducedMotion ? 'none' : undefined}>{activeTask ? <TaskCard task={activeTask} preview /> : null}</DragOverlay>, document.body)}
-      </DndContext>
+      {layout === 'board' ? <TrelloBoard tasks={filtered} plannedDate={plannedDate} /> : <div className="task-list-view">{filtered.map(task => <TaskCard key={task.id} task={task} />)}</div>}
+      {filtered.length === 0 && <div className="empty-state"><h3>{scope === 'today' ? 'Your day is clear' : 'No cards in this view'}</h3><p>Use Add a card in a list, schedule work from Backlog, or open All tasks.</p></div>}
     </div>
   )
 }

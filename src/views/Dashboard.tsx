@@ -7,7 +7,7 @@ export function Dashboard() {
   const allTasks = useStore(state => state.tasks)
   const activeProjectId = useStore(state => state.activeProjectId)
   const project = projects.find(p => p.id === activeProjectId)
-  const tasks = allTasks.filter(t => t.projectId === activeProjectId)
+  const tasks = allTasks.filter(t => t.projectId === activeProjectId && !t.archived)
   const completed = tasks.filter(t => t.status === 'done').length
   const progress = tasks.length ? Math.round(completed / tasks.length * 100) : 0
   const urgent = tasks.filter(t => t.priority === 'urgent' && t.status !== 'done')

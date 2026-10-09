@@ -16,7 +16,7 @@ export function addDays(date: string, days: number): string {
 export function scopeTasks(tasks: Task[], scope: TaskScope, today: string, startDate: string, week: number, showCompleted: boolean): Task[] {
   const from = addDays(startDate, (week - 1) * 7)
   const to = addDays(from, 7)
-  return tasks.filter(task => (showCompleted || task.status !== 'done') &&
+  return tasks.filter(task => !task.archived && (showCompleted || task.status !== 'done') &&
     (scope === 'all' || (scope === 'backlog' ? !task.plannedDate : scope === 'today' ? task.plannedDate === today : !!task.plannedDate && task.plannedDate >= from && task.plannedDate < to)))
 }
 export function localDateKey(date = new Date()): string {

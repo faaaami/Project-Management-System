@@ -20,6 +20,12 @@ export interface Task {
   dueDate: string
   plannedDate?: string
   plannedTime?: string
+  listId?: string
+  order?: number
+  archived?: boolean
+  cover?: string
+  comments?: { id: string; text: string; createdAt: string }[]
+  attachments?: { id: string; name: string; url: string }[]
   tags: string[]
   subtasks: Subtask[]
   createdAt: string
@@ -31,7 +37,11 @@ export interface Project {
   name: string
   modules: string[]
   startDate?: string
+  lists?: BoardList[]
+  background?: string
 }
+
+export interface BoardList { id: string; title: string; status: TaskStatus }
 
 export interface Todo {
   id: string
