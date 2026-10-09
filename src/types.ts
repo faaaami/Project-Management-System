@@ -18,6 +18,7 @@ export interface Task {
   type: TaskType
   module: string
   dueDate: string
+  plannedDate?: string
   tags: string[]
   subtasks: Subtask[]
   createdAt: string
@@ -28,6 +29,7 @@ export interface Project {
   id: string
   name: string
   modules: string[]
+  startDate?: string
 }
 
 export interface Todo {

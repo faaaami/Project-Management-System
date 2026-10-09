@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { localDateKey } from '../lib/tasks'
 import type {
   Note,
   Project,
@@ -94,6 +95,7 @@ export const useStore = create<DevBoardState>()(
           id: uid(),
           name: name.trim() || 'Untitled Project',
           modules: [...modules],
+          startDate: localDateKey(),
         }
         set((state) => ({
           projects: [...state.projects, project],
@@ -149,6 +151,7 @@ export const useStore = create<DevBoardState>()(
           type: input.type ?? 'feature',
           module: input.module ?? '',
           dueDate: input.dueDate ?? '',
+          plannedDate: input.plannedDate ?? '',
           tags: input.tags ?? [],
           subtasks: input.subtasks ?? [],
           createdAt: timestamp,
