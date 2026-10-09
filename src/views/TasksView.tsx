@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { useStore } from '../store'
 import type { Task } from '../types'
 import { Select } from '../components/Select'
 import { TaskEditor } from '../components/TaskEditor'
+import { TaskZoomControls } from '../components/TaskZoomControls'
+import { normalizeTaskZoom } from '../lib/zoom'
 import { TrelloBoard } from '../components/TrelloBoard'
 import { boardLists, taskListId } from '../lib/board'
 import { SchedulePicker } from '../components/SchedulePicker'
@@ -17,14 +19,14 @@ import {
   TYPE_LABEL,
 } from '../lib/ui'
 
-function TaskCard({ task, preview = false, onSaved }: { task: Task; preview?: boolean; onSaved?: (task: Task) => void }) {
+function TaskCard({ task, preview = false, onSaved, zoom }: { task: Task; preview?: boolean; onSaved?: (task: Task) => void; zoom: number }) {
   const updateTask = useStore((state) => state.updateTask)
   const [editing, setEditing] = useState(false)
   const project = useStore(state => state.projects.find(p => p.id === task.projectId))
   const lists = boardLists(project)
 
   return (
-    <article className={`task-card rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${preview ? 'task-preview' : ''}`}>
+    <article style={{ zoom }} className={`task-card rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 ${preview ? 'task-preview' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">
           {preview ? task.title : <button type="button" className="task-title-button" onClick={() => setEditing(true)}>{task.title}</button>}
@@ -138,6 +140,7 @@ function AddTaskForm({ plannedDate, onSaved }: { plannedDate: string; onSaved: (
 }
 
 export function TasksView() {
+  const zoom = useStore(state => normalizeTaskZoom(state.taskZoom) / 100)
   const tasks = useStore((state) => state.tasks)
   const activeProjectId = useStore((state) => state.activeProjectId)
   const updateTask = useStore(state => state.updateTask)
@@ -185,11 +188,11 @@ export function TasksView() {
       <div className="task-create-bar"><button className="primary-action" onClick={() => setCreating(true)}>+ Create task</button><p role="status">{feedback || 'Create as many cards as you need. Dates and times are optional.'}</p></div>{creating && <TaskEditor defaultPlannedDate={plannedDate} onClose={() => setCreating(false)} onSaved={saved} />}
       <details className="quick-add-disclosure"><summary>＋ Create a card with date and time</summary><AddTaskForm key={plannedDate} plannedDate={plannedDate} onSaved={saved} /></details>
       
-      <div className="task-toolbar"><label className="search-field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input aria-label="Search tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tasks, tags, or descriptions" /></label><div className="view-toggle" aria-label="Task view"><button aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>Board</button><button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</button></div></div>
+      <div className="task-toolbar"><label className="search-field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input aria-label="Search tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tasks, tags, or descriptions" /></label><div className="view-toggle" aria-label="Task view"><button aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>Board</button><button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</button></div><TaskZoomControls /></div>
       <div className="task-filters"><Select label="Filter priority" value={priority} onChange={setPriority} options={[{ value: '', label: 'All priorities' }, ...Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))]} /><Select label="Filter module" value={module} onChange={setModule} options={[{ value: '', label: 'All modules' }, ...modules.map(value => ({ value, label: value }))]} /><Select label="Filter deadlines" value={deadline} onChange={setDeadline} options={[{ value: '', label: 'All deadlines' }, { value: 'overdue', label: 'Overdue', color: '#d4665c' }, { value: 'today', label: 'Due today', color: '#d9a546' }]} /><Select label="Sort tasks" value={sort} onChange={setSort} options={[{ value: 'scheduled', label: 'Scheduled time' }, { value: 'newest', label: 'Newest first' }, { value: 'priority', label: 'Priority first' }, { value: 'due', label: 'Due date' }, { value: 'title', label: 'Title A–Z' }]} />{(query || priority || module || deadline) && <button className="text-action" onClick={() => { setQuery(''); setPriority(''); setModule(''); setDeadline('') }}>Clear filters</button>}<span className="result-count">{filtered.length} of {projectTasks.length} tasks</span></div>
       {layout === 'board' && <details className="board-instructions"><summary>How to move tasks</summary>Drag a card with its handle to reorder it or move it to another list. Keyboard: Space to pick up, arrows to move, Space to drop, Escape to cancel.</details>}
       {scope === 'today' && overdue.length > 0 && <details className="overdue-section"><summary>Overdue work <span>{overdue.length}</span><small>Expand when you’re ready to catch up</small></summary><div className="overdue-items">{overdue.map(task => <div key={task.id}><button className="task-title-button" onClick={() => { setScope('all'); setQuery(task.title); setPriority(''); setModule(''); setDeadline('') }}>{task.title}</button><span>{task.plannedDate && task.plannedDate < today ? `Planned ${task.plannedDate}` : `Deadline ${task.dueDate}`}</span>{task.plannedDate !== today && <button className="secondary-action" onClick={() => updateTask(task.id, { plannedDate: today })}>Move to today</button>}</div>)}</div></details>}
-      {layout === 'board' ? <TrelloBoard tasks={filtered} plannedDate={plannedDate} onSaved={saved} /> : <div className="task-list-view">{filtered.map(task => <TaskCard key={task.id} task={task} onSaved={saved} />)}</div>}
+      {layout === 'board' ? <TrelloBoard tasks={filtered} plannedDate={plannedDate} onSaved={saved} zoom={zoom} /> : <div className="task-list-view" style={{ '--task-scale': zoom } as CSSProperties}>{filtered.map(task => <TaskCard key={task.id} task={task} onSaved={saved} zoom={zoom} />)}</div>}
       {filtered.length === 0 && <div className="empty-state"><h3>{scope === 'today' ? 'Your day is clear' : projectTasks.length === 0 ? 'Your board is ready' : 'No cards in this view'}</h3><p>{projectTasks.length === 0 ? 'Start with Add a card in any list. Add more cards and lists whenever you need them.' : 'Adjust your filters, schedule work from Backlog, or open All cards.'}</p></div>}
     </div>
   )

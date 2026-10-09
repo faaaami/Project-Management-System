@@ -103,3 +103,26 @@ test('hundreds of user cards can be created without a limit or duplicate IDs', (
   assert.deepEqual(cards.map(task => task.order).sort((a, b) => a - b), Array.from({ length: 250 }, (_, i) => i))
   assert.equal(JSON.parse(storage.get(STORAGE_KEY)).state.tasks.length, 250)
 })
+
+test('task zoom persists and survives navigation or reload without changing cards', async () => {
+  reset()
+  const card = useStore.getState().addTask({ title: 'Keep my card' })
+  useStore.getState().setTaskZoom(80)
+  assert.equal(JSON.parse(storage.get(STORAGE_KEY)).state.taskZoom, 80)
+  useStore.setState({ taskZoom: 100 })
+  const snapshot = JSON.parse(storage.get(STORAGE_KEY))
+  snapshot.state.taskZoom = 80
+  storage.set(STORAGE_KEY, JSON.stringify(snapshot))
+  await useStore.persist.rehydrate()
+  assert.equal(useStore.getState().taskZoom, 80)
+  assert.deepEqual(useStore.getState().tasks, [card])
+})
+
+test('task zoom stays within readable bounds and resets to normal size', () => {
+  useStore.getState().setTaskZoom(-100)
+  assert.equal(useStore.getState().taskZoom, 60)
+  useStore.getState().setTaskZoom(999)
+  assert.equal(useStore.getState().taskZoom, 150)
+  useStore.getState().setTaskZoom(Number.NaN)
+  assert.equal(useStore.getState().taskZoom, 100)
+})

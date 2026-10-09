@@ -399,3 +399,17 @@ main .inline-card-create textarea { padding: 10px; min-height: 70px; width: 100%
 .trello-list { display: flex; flex-direction: column; max-height: min(72dvh, 820px); }
 .trello-list-cards { overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 2px 2px 6px; }
 .trello-list-heading, .add-card-button, .inline-card-create { flex-shrink: 0; }
+
+.task-zoom-controls { display: flex; align-items: center; flex-shrink: 0; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.task-zoom-label { padding: 0 8px; color: var(--muted); font-size: 12px; }
+.task-zoom-controls button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 6px; color: var(--ink); }
+.task-zoom-controls button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.task-zoom-controls button:disabled { opacity: .4; cursor: default; }
+.task-zoom-controls output { min-width: 48px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.task-zoom-controls .task-zoom-reset { padding: 0 10px; font-size: 12px; border-left: 1px solid var(--line); border-radius: 0 6px 6px 0; margin-left: 4px; }
+.task-list-view { grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(260px * var(--task-scale, 1))), 1fr)); gap: calc(14px * var(--task-scale, 1)); }
+.trello-list { flex-basis: calc(280px * var(--task-scale, 1)); width: calc(280px * var(--task-scale, 1)); padding: calc(10px * var(--task-scale, 1)) calc(8px * var(--task-scale, 1)); }
+.trello-list-cards { gap: calc(9px * var(--task-scale, 1)); }
+.trello-list-heading, .trello-list .list-settings, .trello-list .add-card-button, .trello-list .inline-card-create, .add-list-panel { zoom: var(--task-scale, 1); }
+@media (max-width: 900px) { .task-toolbar { flex-wrap: wrap; } .task-toolbar .search-field { flex-basis: 100%; } }
+@media (max-width: 600px) { .trello-list { flex-basis: calc(260px * var(--task-scale, 1)); width: calc(260px * var(--task-scale, 1)); } }
