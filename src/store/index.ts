@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { localDateKey } from '../lib/tasks'
+import { boardLists, nextCardOrder, taskListId } from '../lib/board'
 import type {
   Note,
   Project,
@@ -141,20 +142,23 @@ export const useStore = create<DevBoardState>()(
       // ------------------------------------------------------------------- Tasks
       addTask: (input) => {
         const timestamp = new Date().toISOString()
+        const projectId = input.projectId ?? get().activeProjectId
+        const lists = boardLists(get().projects.find(project => project.id === projectId))
+        const list = lists.find(list => list.id === input.listId) ?? lists.find(list => list.status === (input.status ?? 'todo')) ?? lists[0]
         const task: Task = {
           id: uid(),
-          projectId: input.projectId ?? get().activeProjectId,
+          projectId,
           title: input.title.trim() || 'Untitled Task',
           description: input.description ?? '',
-          status: input.status ?? 'todo',
+          status: list.status,
           priority: input.priority ?? 'medium',
           type: input.type ?? 'feature',
           module: input.module ?? '',
           dueDate: input.dueDate ?? '',
           plannedDate: input.plannedDate ?? '',
           plannedTime: input.plannedDate ? input.plannedTime ?? '' : '',
-          listId: input.listId,
-          order: input.order ?? -Date.now(),
+          listId: list.id,
+          order: input.order ?? nextCardOrder(get().tasks, projectId, list.id, lists),
           archived: input.archived ?? false,
           cover: input.cover ?? '',
           comments: input.comments ?? [],
@@ -169,13 +173,21 @@ export const useStore = create<DevBoardState>()(
       },
 
       updateTask: (id, patch) =>
-        set((state) => ({
-          tasks: state.tasks.map((t) =>
-            t.id === id
-              ? { ...t, ...patch, updatedAt: new Date().toISOString() }
-              : t,
-          ),
-        })),
+        set((state) => ({ tasks: state.tasks.map(task => {
+          if (task.id !== id) return task
+          const lists = boardLists(state.projects.find(project => project.id === task.projectId))
+          const currentListId = taskListId(task, lists)
+          const destination = patch.listId !== undefined ? lists.find(list => list.id === patch.listId)
+            : patch.status !== undefined && patch.status !== task.status ? lists.find(list => list.status === patch.status) : undefined
+          const updated = { ...task, ...patch, updatedAt: new Date().toISOString() }
+          if (destination) {
+            updated.listId = destination.id
+            updated.status = destination.status
+            if (destination.id !== currentListId) updated.order = nextCardOrder(state.tasks, task.projectId, destination.id, lists)
+          }
+          if (!updated.plannedDate) updated.plannedTime = ''
+          return updated
+        }) })),
 
       deleteTask: (id) =>
         set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) })),

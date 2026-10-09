@@ -17,7 +17,7 @@ import {
   TYPE_LABEL,
 } from '../lib/ui'
 
-function TaskCard({ task, preview = false }: { task: Task; preview?: boolean }) {
+function TaskCard({ task, preview = false, onSaved }: { task: Task; preview?: boolean; onSaved?: (task: Task) => void }) {
   const updateTask = useStore((state) => state.updateTask)
   const [editing, setEditing] = useState(false)
   const project = useStore(state => state.projects.find(p => p.id === task.projectId))
@@ -89,12 +89,12 @@ function TaskCard({ task, preview = false }: { task: Task; preview?: boolean }) 
       )}
       {task.plannedDate && <p className="task-planned">Planned {new Date(`${task.plannedDate}T12:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' })}{task.plannedTime ? ` at ${formatTime(task.plannedTime)}` : ' · Any time'}</p>}
       {task.tags.length > 0 && <div className="task-tags">{task.tags.map(tag => <span key={tag}>#{tag}</span>)}</div>}
-      {editing && <TaskEditor task={task} onClose={() => setEditing(false)} />}
+      {editing && <TaskEditor task={task} onClose={() => setEditing(false)} onSaved={onSaved} />}
     </article>
   )
 }
 
-function AddTaskForm({ plannedDate }: { plannedDate: string }) {
+function AddTaskForm({ plannedDate, onSaved }: { plannedDate: string; onSaved: (task: Task) => void }) {
   const addTask = useStore((state) => state.addTask)
   const project = useStore((state) =>
     state.projects.find((p) => p.id === state.activeProjectId),
@@ -108,7 +108,8 @@ function AddTaskForm({ plannedDate }: { plannedDate: string }) {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!title.trim() || !project) return
-    addTask({ title, module: project?.modules[0] ?? '', plannedDate: date, plannedTime: date ? time : '' })
+    const created = addTask({ title, module: project?.modules[0] ?? '', plannedDate: date, plannedTime: date ? time : '' })
+    onSaved(created)
     setFeedback(date ? `Task scheduled for ${date}${time ? ' at ' + formatTime(time) : ''}. Find it in the five-week plan or All tasks.` : 'Task added to Backlog.')
     setTitle('')
   }
@@ -131,7 +132,7 @@ function AddTaskForm({ plannedDate }: { plannedDate: string }) {
         Add
       </button>
       <button type="button" className="secondary-action" onClick={() => setCreating(true)}>Add details</button>
-      <SchedulePicker date={date} time={time} onDateChange={setDate} onTimeChange={setTime} /><p className="schedule-feedback" role="status">{feedback}</p>{creating && <TaskEditor defaultPlannedDate={date} defaultPlannedTime={time} defaultTitle={title} onClose={() => setCreating(false)} />}
+      <SchedulePicker date={date} time={time} onDateChange={setDate} onTimeChange={setTime} /><p className="schedule-feedback" role="status">{feedback}</p>{creating && <TaskEditor defaultPlannedDate={date} defaultPlannedTime={time} defaultTitle={title} onClose={() => setCreating(false)} onSaved={task => { setTitle(''); onSaved(task) }} />}
     </form>
   )
 }
@@ -141,6 +142,8 @@ export function TasksView() {
   const activeProjectId = useStore((state) => state.activeProjectId)
   const updateTask = useStore(state => state.updateTask)
   const projects = useStore(state => state.projects)
+  const [creating, setCreating] = useState(false)
+  const [feedback, setFeedback] = useState('')
   const [query, setQuery] = useState('')
   const [priority, setPriority] = useState('')
   const [module, setModule] = useState('')
@@ -171,6 +174,7 @@ export function TasksView() {
   const overdue = matching.filter(task => task.status !== 'done' && ((task.plannedDate && task.plannedDate < today) || (task.dueDate && task.dueDate < today)))
   const pending = projectTasks.filter(task => task.status !== 'done')
   const plannedDate = scope === 'today' ? today : scope === 'week' ? selectedDay : ''
+  const saved = (task: Task) => { setQuery(''); setPriority(''); setModule(''); setDeadline(''); if (!task.archived) { setScope(task.plannedDate === today ? 'today' : task.plannedDate ? 'all' : 'backlog'); setShowCompleted(task.status === 'done') } setFeedback(task.archived ? `Archived “${task.title}”. Find it in the board Archive.` : `Saved “${task.title}”${task.plannedDate ? ` for ${task.plannedDate}${task.plannedTime ? ` at ${formatTime(task.plannedTime)}` : ''}` : ' to Backlog'}.`) }
   const changeScope = (next: TaskScope) => { setScope(next); setDeadline(''); setShowCompleted(false); if (next === 'week') setNewDay(weekStart) }
 
   return (
@@ -178,13 +182,14 @@ export function TasksView() {
       <div className="planner-navigation" aria-label="Task time view">{([['today', 'Today'], ['week', '5-week plan'], ['backlog', 'Backlog'], ['all', 'All tasks']] as const).map(([value, label]) => <button key={value} aria-pressed={scope === value} onClick={() => changeScope(value)}>{label}<span>{value === 'today' ? pending.filter(t => t.plannedDate === today).length : value === 'backlog' ? pending.filter(t => !t.plannedDate).length : value === 'all' ? projectTasks.length : ''}</span></button>)}</div>
       <section className="planner-heading"><div><h2>{scope === 'today' ? 'Focus on today' : scope === 'week' ? `Week ${week}` : scope === 'backlog' ? 'Your unscheduled ideas' : 'Project history'}</h2><p>{scope === 'today' ? `${new Date(`${today}T12:00:00`).toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })} · Only tasks planned for today` : scope === 'week' ? `${weekStart} to ${addDays(weekStart, 6)} · Set your plan’s start date in Manage project` : scope === 'backlog' ? 'Open a task to choose a planned work day. Deadlines are tracked separately.' : 'Every task, including completed work. Search here whenever you need it.'}</p></div>{scope !== 'all' && <label className="completed-toggle"><input type="checkbox" checked={showCompleted} onChange={e => setShowCompleted(e.target.checked)} />Show completed</label>}</section>
       {scope === 'week' && <div className="week-picker">{[1, 2, 3, 4, 5].map(value => <button key={value} aria-pressed={week === value} onClick={() => { setWeek(value); setNewDay(addDays(startDate, (value - 1) * 7)) }}>Week {value}</button>)}<label>New tasks for<input type="date" value={selectedDay} min={weekStart} max={addDays(weekStart, 6)} onChange={e => setNewDay(e.target.value)} required /></label></div>}
-      <details className="quick-add-disclosure"><summary>＋ Create a card with date and time</summary><AddTaskForm key={plannedDate} plannedDate={plannedDate} /></details>
+      <div className="task-create-bar"><button className="primary-action" onClick={() => setCreating(true)}>+ Create task</button><p role="status">{feedback || 'Choose a list, planned date, and time in one place.'}</p></div>{creating && <TaskEditor defaultPlannedDate={plannedDate} onClose={() => setCreating(false)} onSaved={saved} />}
+      <details className="quick-add-disclosure"><summary>＋ Create a card with date and time</summary><AddTaskForm key={plannedDate} plannedDate={plannedDate} onSaved={saved} /></details>
       
       <div className="task-toolbar"><label className="search-field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input aria-label="Search tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search tasks, tags, or descriptions" /></label><div className="view-toggle" aria-label="Task view"><button aria-pressed={layout === 'board'} onClick={() => setLayout('board')}>Board</button><button aria-pressed={layout === 'list'} onClick={() => setLayout('list')}>List</button></div></div>
       <div className="task-filters"><Select label="Filter priority" value={priority} onChange={setPriority} options={[{ value: '', label: 'All priorities' }, ...Object.entries(PRIORITY_LABEL).map(([value, label]) => ({ value, label }))]} /><Select label="Filter module" value={module} onChange={setModule} options={[{ value: '', label: 'All modules' }, ...modules.map(value => ({ value, label: value }))]} /><Select label="Filter deadlines" value={deadline} onChange={setDeadline} options={[{ value: '', label: 'All deadlines' }, { value: 'overdue', label: 'Overdue', color: '#d4665c' }, { value: 'today', label: 'Due today', color: '#d9a546' }]} /><Select label="Sort tasks" value={sort} onChange={setSort} options={[{ value: 'scheduled', label: 'Scheduled time' }, { value: 'newest', label: 'Newest first' }, { value: 'priority', label: 'Priority first' }, { value: 'due', label: 'Due date' }, { value: 'title', label: 'Title A–Z' }]} />{(query || priority || module || deadline) && <button className="text-action" onClick={() => { setQuery(''); setPriority(''); setModule(''); setDeadline('') }}>Clear filters</button>}<span className="result-count">{filtered.length} of {projectTasks.length} tasks</span></div>
       {layout === 'board' && <details className="board-instructions"><summary>How to move tasks</summary>Drag a card with its handle to reorder it or move it to another list. Keyboard: Space to pick up, arrows to move, Space to drop, Escape to cancel.</details>}
       {scope === 'today' && overdue.length > 0 && <details className="overdue-section"><summary>Overdue work <span>{overdue.length}</span><small>Expand when you’re ready to catch up</small></summary><div className="overdue-items">{overdue.map(task => <div key={task.id}><button className="task-title-button" onClick={() => { setScope('all'); setQuery(task.title); setPriority(''); setModule(''); setDeadline('') }}>{task.title}</button><span>{task.plannedDate && task.plannedDate < today ? `Planned ${task.plannedDate}` : `Deadline ${task.dueDate}`}</span>{task.plannedDate !== today && <button className="secondary-action" onClick={() => updateTask(task.id, { plannedDate: today })}>Move to today</button>}</div>)}</div></details>}
-      {layout === 'board' ? <TrelloBoard tasks={filtered} plannedDate={plannedDate} /> : <div className="task-list-view">{filtered.map(task => <TaskCard key={task.id} task={task} />)}</div>}
+      {layout === 'board' ? <TrelloBoard tasks={filtered} plannedDate={plannedDate} onSaved={saved} /> : <div className="task-list-view">{filtered.map(task => <TaskCard key={task.id} task={task} onSaved={saved} />)}</div>}
       {filtered.length === 0 && <div className="empty-state"><h3>{scope === 'today' ? 'Your day is clear' : 'No cards in this view'}</h3><p>Use Add a card in a list, schedule work from Backlog, or open All tasks.</p></div>}
     </div>
   )

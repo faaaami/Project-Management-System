@@ -38,3 +38,9 @@ test('moves leave archived cards and other projects unchanged', () => {
   assert.equal(moved[2], other)
 })
 test('labels receive stable readable colors', () => assert.equal(labelColor('release'), labelColor('release')))
+
+test('dropping below a card moves downward rather than leaving the order unchanged', () => {
+  const tasks = [task('a', { order: 0 }), task('b', { order: 1 }), task('c', { order: 2 })]
+  const moved = moveCard(tasks, 'a', DEFAULT_LISTS[0], DEFAULT_LISTS, 'b', 'after')
+  assert.deepEqual(orderedCards(moved).map(task => task.id), ['b', 'a', 'c'])
+})
