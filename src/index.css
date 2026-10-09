@@ -413,3 +413,35 @@ main .inline-card-create textarea { padding: 10px; min-height: 70px; width: 100%
 .trello-list-heading, .trello-list .list-settings, .trello-list .add-card-button, .trello-list .inline-card-create, .add-list-panel { zoom: var(--task-scale, 1); }
 @media (max-width: 900px) { .task-toolbar { flex-wrap: wrap; } .task-toolbar .search-field { flex-basis: 100%; } }
 @media (max-width: 600px) { .trello-list { flex-basis: calc(260px * var(--task-scale, 1)); width: calc(260px * var(--task-scale, 1)); } }
+
+/* Board zoom includes its title, workspace details, toolbar, and spacing. */
+.trello-board-shell { border-radius: calc(12px * var(--task-scale, 1)); min-height: calc(470px * var(--task-scale, 1)); }
+.trello-board-top { zoom: var(--task-scale, 1); flex-wrap: wrap; align-items: flex-start; }
+.trello-board-top > div:first-child { flex: 1 1 250px; min-width: 0; }
+.trello-board-top h2 { overflow-wrap: anywhere; }
+.trello-board-top > div > span { font-size: 12px; }
+.trello-lists { padding: calc(18px * var(--task-scale, 1)); gap: calc(14px * var(--task-scale, 1)); min-height: calc(400px * var(--task-scale, 1)); }
+.board-top-actions { flex-wrap: wrap; justify-content: flex-end; flex: 1 1 480px; }
+.board-top-actions > button:disabled { opacity: .45; cursor: default; }
+.board-progress-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 14px; font-size: 11px; color: #ffffffe0; }
+.board-progress-track { width: 120px; height: 5px; overflow: hidden; background: #ffffff30; border-radius: 4px; }
+.board-progress-track > div { height: 100%; background: #9fefc5; border-radius: inherit; transition: width 180ms ease; }
+.board-focus { position: fixed; inset: 12px; z-index: 80; min-height: 0; display: flex; flex-direction: column; box-shadow: 0 0 0 20px var(--canvas), 0 20px 80px #0006; }
+.board-focus .trello-lists { min-height: 0; flex: 1; }
+.board-focus .trello-list { max-height: 100%; }
+.board-notice { display: flex; align-items: center; gap: 14px; padding: 12px 18px; background: var(--surface); border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+.board-notice > span { flex: 1; }
+.board-notice button { min-width: 44px; min-height: 36px; border-radius: 6px; color: var(--accent); font-weight: 600; }
+.board-notice button:hover { background: var(--accent-soft); }
+.card-title-row { display: flex; align-items: flex-start; gap: 8px; }
+.card-complete-button { display: grid; place-items: center; width: 24px; min-width: 24px; height: 24px; border: 1px solid #8590a2; border-radius: 50%; color: #44546f; margin-top: 1px; flex-shrink: 0; }
+.card-complete-button svg { opacity: .3; }
+.card-complete-button:hover, .card-complete-button.is-complete { background: #dcfff1; border-color: #216e4e; color: #216e4e; }
+.card-complete-button:hover svg, .card-complete-button.is-complete svg { opacity: 1; }
+.dark .card-complete-button { color: #dee4ea; }
+.dark .card-complete-button:hover, .dark .card-complete-button.is-complete { background: #164b39; color: #96ecc7; border-color: #96ecc7; }
+.completed-title { text-decoration: line-through; opacity: .7; }
+.backup-settings-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.backup-preview { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas); }
+.backup-feedback { font-size: 13px; color: var(--accent); }
+@media (max-width: 600px) { .board-top-actions { flex-basis: auto; justify-content: flex-start; } .board-focus { inset: 6px; } .trello-lists { padding: calc(12px * var(--task-scale, 1)); gap: calc(10px * var(--task-scale, 1)); } }

@@ -19,6 +19,7 @@ const storage = new Map()
 globalThis.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }
 const { useStore, STORAGE_KEY } = await import(moduleUrl(new URL('../src/store/index.ts', import.meta.url)))
 const { legacySampleTasks } = await import(moduleUrl(new URL('../src/store/seed.ts', import.meta.url)))
+const { parseWorkspaceBackup } = await import(moduleUrl(new URL('../src/lib/backup.ts', import.meta.url)))
 
 test('a new workspace starts with an empty board and no demo content', () => {
   const state = useStore.getState()
@@ -50,7 +51,7 @@ test('upgrading removes only untouched sample cards and preserves the user works
   assert.deepEqual(useStore.getState().tasks, upgraded.tasks)
 })
 function reset() {
-  useStore.setState({ projects: [{ id: 'p1', name: 'Test', modules: [], lists: [{ id: 'todo', title: 'Ideas', status: 'todo' }, { id: 'work', title: 'Work', status: 'doing' }] }], tasks: [], activeProjectId: 'p1' })
+  useStore.setState({ projects: [{ id: 'p1', name: 'Test', modules: [], lists: [{ id: 'todo', title: 'Ideas', status: 'todo' }, { id: 'work', title: 'Work', status: 'doing' }] }], tasks: [], todos: [], notes: [], activeProjectId: 'p1' })
 }
 test('new cards append and derive their progress from the selected custom list', () => {
   reset()
@@ -125,4 +126,116 @@ test('task zoom stays within readable bounds and resets to normal size', () => {
   assert.equal(useStore.getState().taskZoom, 150)
   useStore.getState().setTaskZoom(Number.NaN)
   assert.equal(useStore.getState().taskZoom, 100)
+})
+
+test('one-click completion creates a Done list when needed and reopening moves to To do', () => {
+  reset()
+  const card = useStore.getState().addTask({ title: 'Ship it', listId: 'work' })
+  useStore.getState().toggleTaskComplete(card.id)
+  const completed = useStore.getState().tasks[0]
+  const doneList = useStore.getState().projects[0].lists.find(list => list.status === 'done')
+  assert.equal(completed.status, 'done')
+  assert.equal(completed.listId, doneList.id)
+  assert.equal(useStore.getState().projects[0].lists.length, 3)
+  useStore.getState().toggleTaskComplete(card.id)
+  assert.equal(useStore.getState().tasks[0].status, 'todo')
+  assert.equal(useStore.getState().tasks[0].listId, 'todo')
+  useStore.getState().toggleTaskComplete(card.id)
+  assert.equal(useStore.getState().projects[0].lists.length, 3)
+})
+
+test('archive completed affects only this project and skips open or already archived cards', () => {
+  reset()
+  const completed = useStore.getState().addTask({ title: 'Done' })
+  const open = useStore.getState().addTask({ title: 'Still working' })
+  const other = useStore.getState().addProject('Other')
+  const otherCard = useStore.getState().addTask({ title: 'Other done' })
+  useStore.getState().toggleTaskComplete(completed.id)
+  useStore.getState().toggleTaskComplete(otherCard.id)
+  const changed = useStore.getState().archiveCompleted('p1')
+  assert.deepEqual(changed.map(card => card.id), [completed.id])
+  assert.equal(useStore.getState().tasks.find(card => card.id === completed.id).archived, true)
+  assert.equal(useStore.getState().tasks.find(card => card.id === open.id).archived, false)
+  assert.equal(useStore.getState().tasks.find(card => card.projectId === other.id).archived, false)
+  assert.deepEqual(useStore.getState().archiveCompleted('p1'), [])
+})
+
+function backupFixture() {
+  reset()
+  useStore.getState().addTask({ title: 'Release', listId: 'work', plannedDate: '2026-10-20', plannedTime: '14:30', cover: '#579dff', tags: ['release'], subtasks: [{ id: 'step', text: 'Check release', done: true }], comments: [{ id: 'comment', text: 'Looks good', createdAt: '2026-10-09T10:00:00Z' }], attachments: [{ id: 'link', name: 'Design', url: 'https://example.com/design' }] })
+  useStore.getState().addTodo('Review release')
+  useStore.getState().addNote({ title: 'Plan', body: 'Release notes' })
+  const { projects, tasks, todos, notes } = useStore.getState()
+  return { format: 'devboard-backup', version: 1, projects, tasks, todos, notes }
+}
+
+test('restore keeps existing work and regenerates every ID with correct board relationships', () => {
+  const backup = backupFixture()
+  const original = useStore.getState().tasks[0]
+  const restored = useStore.getState().restoreWorkspace(backup)[0]
+  assert.notEqual(restored.id, 'p1')
+  assert.equal(restored.name, 'Test (restored)')
+  assert.equal(useStore.getState().activeProjectId, 'p1')
+  assert.equal(useStore.getState().tasks.find(card => card.id === original.id), original)
+  const card = useStore.getState().tasks.find(card => card.projectId === restored.id)
+  assert.notEqual(card.id, original.id)
+  assert.equal(card.listId, restored.lists.find(list => list.title === 'Work').id)
+  assert.equal(card.status, 'doing')
+  assert.equal(card.plannedTime, '14:30')
+  assert.equal(card.cover, original.cover)
+  assert.notEqual(card.subtasks[0].id, original.subtasks[0].id)
+  assert.notEqual(card.comments[0].id, original.comments[0].id)
+  assert.notEqual(card.attachments[0].id, original.attachments[0].id)
+  assert.equal(useStore.getState().notes.find(note => note.projectId === restored.id).body, 'Release notes')
+  assert.equal(useStore.getState().todos.find(todo => todo.projectId === restored.id).text, 'Review release')
+  const again = useStore.getState().restoreWorkspace(backup)[0]
+  assert.notEqual(again.id, restored.id)
+  assert.equal(useStore.getState().tasks.length, 3)
+  assert.equal(new Set(useStore.getState().tasks.map(card => card.id)).size, 3)
+  assert.equal(JSON.parse(storage.get(STORAGE_KEY)).state.projects.length, 3)
+})
+
+test('invalid backups are rejected before changing stored data', () => {
+  const backup = backupFixture()
+  const before = useStore.getState()
+  const orphan = structuredClone(backup)
+  orphan.tasks[0].projectId = 'missing'
+  assert.throws(() => useStore.getState().restoreWorkspace(orphan), /missing project/)
+  assert.equal(useStore.getState(), before)
+  assert.throws(() => parseWorkspaceBackup({ ...backup, version: 999 }), /version 1/)
+  assert.throws(() => parseWorkspaceBackup({ ...backup, tasks: [...backup.tasks, backup.tasks[0]] }), /duplicate/)
+  const unsafe = structuredClone(backup)
+  unsafe.tasks[0].attachments[0].url = 'javascript:alert(1)'
+  assert.throws(() => parseWorkspaceBackup(unsafe), /http or https/)
+  const invalidDate = structuredClone(backup)
+  invalidDate.tasks[0].plannedDate = '2026-02-30'
+  assert.throws(() => parseWorkspaceBackup(invalidDate), /date is invalid/)
+  const invalidTime = structuredClone(backup)
+  invalidTime.tasks[0].plannedTime = '24:01'
+  assert.throws(() => parseWorkspaceBackup(invalidTime), /time is invalid/)
+})
+
+test('older backups without custom lists or card extras restore into matching stages', () => {
+  reset()
+  const backup = { format: 'devboard-backup', version: 1, projects: [{ id: 'project-erp', name: 'Old board', modules: ['Auth'] }], tasks: legacySampleTasks, todos: [], notes: [] }
+  const restored = useStore.getState().restoreWorkspace(backup)[0]
+  const card = useStore.getState().tasks.find(card => card.projectId === restored.id && card.status === 'review')
+  assert.equal(card.listId, restored.lists.find(list => list.status === 'review').id)
+  assert.deepEqual(card.comments, [])
+  assert.equal(useStore.getState().tasks.length, 4)
+})
+
+test('changing a list category updates legacy and archived card progress atomically', () => {
+  reset()
+  const first = useStore.getState().addTask({ title: 'Legacy task' })
+  const archived = useStore.getState().addTask({ title: 'Archived task', archived: true })
+  useStore.setState(state => ({ tasks: state.tasks.map(task => task.id === first.id ? { ...task, listId: undefined } : task) }))
+  const lists = useStore.getState().projects[0].lists.map(list => list.id === 'todo' ? { ...list, status: 'review' } : list)
+  useStore.getState().updateProject('p1', { lists })
+  for (const id of [first.id, archived.id]) {
+    const card = useStore.getState().tasks.find(card => card.id === id)
+    assert.equal(card.listId, 'todo')
+    assert.equal(card.status, 'review')
+  }
+  assert.equal(useStore.getState().tasks.find(card => card.id === archived.id).archived, true)
 })

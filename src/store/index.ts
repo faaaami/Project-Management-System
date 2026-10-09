@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { localDateKey } from '../lib/tasks'
-import { boardLists, nextCardOrder, taskListId } from '../lib/board'
+import { boardLists, moveCard, nextCardOrder, taskListId } from '../lib/board'
+import { copyWorkspaceBackup, parseWorkspaceBackup } from '../lib/backup'
 import { normalizeTaskZoom } from '../lib/zoom'
 import type {
   Note,
@@ -52,6 +53,9 @@ export interface DevBoardState {
   updateTask: (id: string, patch: TaskPatch) => void
   deleteTask: (id: string) => void
   toggleSubtask: (taskId: string, subtaskId: string) => void
+  toggleTaskComplete: (id: string) => void
+  archiveCompleted: (projectId: string) => Task[]
+  restoreWorkspace: (backup: unknown) => Project[]
   setSubtasks: (taskId: string, subtasks: SubtaskInput[]) => void
 
   // Todos
@@ -111,11 +115,21 @@ export const useStore = create<DevBoardState>()(
       },
 
       updateProject: (id, patch) =>
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, ...patch } : p,
-          ),
-        })),
+        set((state) => {
+          const previous = state.projects.find(project => project.id === id)
+          const next = previous ? { ...previous, ...patch } : undefined
+          const previousLists = boardLists(previous)
+          const nextLists = boardLists(next)
+          return {
+            projects: state.projects.map(project => project.id === id ? { ...project, ...patch } : project),
+            tasks: patch.lists ? state.tasks.map(task => {
+              if (task.projectId !== id) return task
+              const destination = nextLists.find(list => list.id === taskListId(task, previousLists)) ?? nextLists.find(list => list.status === task.status) ?? nextLists[0]
+              if (task.listId === destination.id && task.status === destination.status) return task
+              return { ...task, listId: destination.id, status: destination.status, updatedAt: new Date().toISOString() }
+            }) : state.tasks,
+          }
+        }),
 
       deleteProject: (id) =>
         set((state) => {
@@ -196,6 +210,30 @@ export const useStore = create<DevBoardState>()(
 
       deleteTask: (id) =>
         set((state) => ({ tasks: state.tasks.filter((t) => t.id !== id) })),
+
+      toggleTaskComplete: (id) => set(state => {
+        const task = state.tasks.find(task => task.id === id)
+        const project = state.projects.find(project => project.id === task?.projectId)
+        if (!task || !project || task.archived) return state
+        const status = task.status === 'done' ? 'todo' : 'done'
+        const lists = boardLists(project)
+        const destination = lists.find(list => list.status === status) ?? { id: uid(), title: status === 'done' ? 'Done' : 'To do', status }
+        const nextLists = lists.some(list => list.id === destination.id) ? lists : [...lists, destination]
+        return { tasks: moveCard(state.tasks, id, destination, nextLists), projects: nextLists === lists ? state.projects : state.projects.map(item => item.id === project.id ? { ...item, lists: nextLists } : item) }
+      }),
+
+      archiveCompleted: (projectId) => {
+        const cards = get().tasks.filter(task => task.projectId === projectId && task.status === 'done' && !task.archived)
+        const ids = new Set(cards.map(card => card.id))
+        set(state => ({ tasks: state.tasks.map(task => ids.has(task.id) ? { ...task, archived: true, updatedAt: new Date().toISOString() } : task) }))
+        return cards
+      },
+
+      restoreWorkspace: (backup) => {
+        const copied = copyWorkspaceBackup(parseWorkspaceBackup(backup), uid)
+        set(state => ({ projects: [...state.projects, ...copied.projects], tasks: [...state.tasks, ...copied.tasks], todos: [...state.todos, ...copied.todos], notes: [...state.notes, ...copied.notes], activeProjectId: state.activeProjectId || copied.projects[0].id }))
+        return copied.projects
+      },
 
       toggleSubtask: (taskId, subtaskId) =>
         set((state) => ({

@@ -21,6 +21,6 @@ export function moveCard(tasks: Task[], id: string, destination: BoardList, list
 }
 export function nextCardOrder(tasks: Task[], projectId: string, listId: string, lists: BoardList[]): number {
   const cards = tasks.filter(task => task.projectId === projectId && !task.archived && taskListId(task, lists) === listId)
-  return cards.length ? Math.max(...cards.map(task => task.order ?? 0)) + 1 : 0
+  return cards.length ? cards.reduce((highest, task) => Math.max(highest, task.order ?? 0), -Infinity) + 1 : 0
 }
 export function labelColor(label: string): string { const colors = ['#216e4e', '#974f0c', '#ae2a19', '#5e4db2', '#0055cc', '#206a83']; let hash = 0; for (const char of label) hash = (hash * 31 + char.charCodeAt(0)) | 0; return colors[Math.abs(hash) % colors.length] }
