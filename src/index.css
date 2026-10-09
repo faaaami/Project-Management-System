@@ -396,3 +396,6 @@ main .inline-card-create textarea { padding: 10px; min-height: 70px; width: 100%
 .trello-card { cursor: pointer; }
 .trello-card-overlay { cursor: grabbing; }
 .inline-card-create > div { flex-wrap: wrap; }
+.trello-list { display: flex; flex-direction: column; max-height: min(72dvh, 820px); }
+.trello-list-cards { overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; padding: 2px 2px 6px; }
+.trello-list-heading, .add-card-button, .inline-card-create { flex-shrink: 0; }

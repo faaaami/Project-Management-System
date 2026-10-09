@@ -16,11 +16,12 @@ import {
   seedProjects,
   seedTasks,
   seedTodos,
+  removeUntouchedSampleCards,
   uid,
 } from './seed'
 
 /** Bump when the persisted shape changes, then handle it in `migrate`. */
-export const STORE_VERSION = 1
+export const STORE_VERSION = 2
 export const STORAGE_KEY = 'devboard-storage'
 
 export type Theme = 'dark' | 'light'
@@ -299,9 +300,11 @@ export const useStore = create<DevBoardState>()(
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<DevBoardState>
         if (version !== STORE_VERSION) {
-          // Future schema changes go here. For now, fall back to seed data so
-          // the app never boots with an incompatible shape.
-          return { ...seedState(), ...state, version: STORE_VERSION }
+          return {
+            ...seedState(), ...state,
+            tasks: version < 2 ? removeUntouchedSampleCards(state.tasks ?? []) : state.tasks ?? [],
+            version: STORE_VERSION,
+          }
         }
         return state as DevBoardState
       },

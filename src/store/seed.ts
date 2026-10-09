@@ -10,30 +10,20 @@ export const uid = (): string => {
 
 const now = () => new Date().toISOString()
 
-const ERP_MODULES = [
-  'Auth',
-  'Inventory',
-  'Sales',
-  'Purchase',
-  'Accounts',
-  'HR',
-  'Reports',
-  'Infra',
-]
-
 export const SEED_PROJECT_ID = 'project-erp'
 
 export const seedProjects: Project[] = [
   {
     id: SEED_PROJECT_ID,
-    name: 'ERP Project',
-    modules: ERP_MODULES,
+    name: 'My board',
+    modules: [],
   },
 ]
 
 const projectId = SEED_PROJECT_ID
 
-export const seedTasks: Task[] = [
+// Original samples identify untouched demo cards during the one-time upgrade.
+export const legacySampleTasks: Task[] = [
   {
     id: 'task-seed-1',
     projectId,
@@ -103,30 +93,18 @@ export const seedTasks: Task[] = [
   },
 ]
 
-export const seedTodos: Todo[] = [
-  {
-    id: 'todo-seed-1',
-    projectId,
-    text: 'Review PR for inventory fix',
-    done: false,
-    createdAt: now(),
-  },
-  {
-    id: 'todo-seed-2',
-    projectId,
-    text: 'Write release notes for v0.3',
-    done: false,
-    createdAt: now(),
-  },
-]
+export const seedTasks: Task[] = []
+export const seedTodos: Todo[] = []
+export const seedNotes: Note[] = []
 
-export const seedNotes: Note[] = [
-  {
-    id: 'note-seed-1',
-    projectId,
-    title: 'Architecture',
-    body: 'Monorepo with a NestJS API and a React admin. Postgres + Prisma. Redis for queues.',
-    createdAt: now(),
-    updatedAt: now(),
-  },
-]
+export function removeUntouchedSampleCards(tasks: Task[]): Task[] {
+  const contentFields = ['projectId', 'title', 'description', 'status', 'priority', 'type', 'module', 'dueDate', 'tags', 'subtasks'] as const
+  return tasks.filter(task => {
+    const sample = legacySampleTasks.find(sample => sample.id === task.id)
+    if (!sample) return true
+    // Keep samples the user has repurposed, moved, scheduled, or annotated.
+    if (task.plannedDate || task.plannedTime || task.cover || task.archived || task.comments?.length || task.attachments?.length) return true
+    if (task.listId && task.listId !== sample.status) return true
+    return contentFields.some(field => JSON.stringify(task[field]) !== JSON.stringify(sample[field]))
+  })
+}

@@ -24,7 +24,7 @@ function MainArea({ view }: { view: ViewId }) {
 }
 
 export default function App() {
-  const [view, setView] = useState<ViewId>('dashboard')
+  const [view, setView] = useState<ViewId>('tasks')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const activeProject = useStore((state) =>
     state.projects.find((p) => p.id === state.activeProjectId),
