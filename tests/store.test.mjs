@@ -121,9 +121,9 @@ test('task zoom persists and survives navigation or reload without changing card
 
 test('task zoom stays within readable bounds and resets to normal size', () => {
   useStore.getState().setTaskZoom(-100)
-  assert.equal(useStore.getState().taskZoom, 60)
+  assert.equal(useStore.getState().taskZoom, 25)
   useStore.getState().setTaskZoom(999)
-  assert.equal(useStore.getState().taskZoom, 150)
+  assert.equal(useStore.getState().taskZoom, 200)
   useStore.getState().setTaskZoom(Number.NaN)
   assert.equal(useStore.getState().taskZoom, 100)
 })

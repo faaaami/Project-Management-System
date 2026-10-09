@@ -11,7 +11,8 @@ A personal project management app built with React, TypeScript, and Vite. Boards
 - Use the check button on a card to complete or reopen it. The notification offers **Undo**.
 - **Archive completed** clears finished cards from the board. Use **Undo** or restore them from **Archive**.
 - Switch between **All cards**, **Today**, **5-week plan**, and **Backlog**. Search and filters help find specific work.
-- Zoom from 60% to 150% using the board header controls. The title, toolbar, cards, and lists resize, and the setting is remembered.
+- Use the floating **+ / −** controls to zoom the blue board canvas from 25% to 200%. Drag empty space to pan, or scroll on the background to zoom around your pointer. Pinch the background on touch screens. **Fit board** shows an overview; **Reset** returns to 100%.
+- Scroll inside long card lists normally. Ctrl/Command plus scroll zooms even over cards. Focus the canvas and use arrow keys to pan, plus/minus to zoom, or zero to reset. The board header and canvas controls stay a readable size.
 - **Focus mode** fills the window with your board. Use **Exit focus** or Escape to leave.
 
 ## Saving and restoring
@@ -33,6 +34,7 @@ npm run dev
 npm test
 npm run lint
 npm run build
+npm run test:browser
 ```
 
-Tests cover task scheduling and filtering, card movement, persistence, sample-card migration, completion, archiving, and backup restore. Vercel deploys automatically from the connected GitHub repository.
+Tests cover task scheduling and filtering, card movement, persistence, sample-card migration, completion, archiving, and backup restore. Browser tests use Microsoft Edge and verify canvas zoom, pan, editing, scaled card drops, reorder, and mobile pinch gestures. Vercel deploys automatically from the connected GitHub repository.

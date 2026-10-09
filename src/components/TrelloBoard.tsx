@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, useDroppable, pointerWithin, closestCenter } from '@dnd-kit/core'
+import { DragOverlay, PointerSensor, KeyboardSensor, useSensor, useSensors, useDroppable, pointerWithin, closestCenter } from '@dnd-kit/core'
 import type { CollisionDetection, DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import type { BoardList, Task } from '../types'
@@ -13,7 +13,9 @@ import { TaskEditor } from './TaskEditor'
 import { Select } from './Select'
 import { Modal } from './Modal'
 import { Icon } from './Icon'
-import { TaskZoomControls } from './TaskZoomControls'
+import { BoardCanvas, CanvasDndContext } from './BoardCanvas'
+import { useCanvasScale } from '../hooks/useCanvasScale'
+import { canvasTranslation } from '../lib/canvas'
 import { WorkspaceBackup } from './WorkspaceBackup'
 
 function Card({ task, preview = false, onSaved, onCompleted, zoom = 1 }: { task: Task; preview?: boolean; onSaved?: (task: Task) => void; onCompleted?: (task: Task) => void; zoom?: number }) {
@@ -28,8 +30,10 @@ function Card({ task, preview = false, onSaved, onCompleted, zoom = 1 }: { task:
 }
 
 function SortableCard({ task, listId, onSaved, onCompleted, zoom }: { task: Task; listId: string; onSaved?: (task: Task) => void; onCompleted: (task: Task) => void; zoom: number }) {
+  const canvasScale = useCanvasScale()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, data: { listId } })
-  return <div ref={setNodeRef} className={`trello-sortable ${isDragging ? 'dragging' : ''}`} style={{ transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined, transition }}><Card task={task} onSaved={onSaved} onCompleted={onCompleted} zoom={zoom} /><button ref={setActivatorNodeRef} {...attributes} {...listeners} className="trello-grip" aria-label={`Drag ${task.title}`} title="Drag card"><Icon name="grip" size={20} /></button></div>
+  const translated = transform ? canvasTranslation(transform, canvasScale) : null
+  return <div ref={setNodeRef} className={`trello-sortable ${isDragging ? 'dragging' : ''}`} style={{ transform: translated && !isDragging ? `translate3d(${translated.x}px,${translated.y}px,0)` : undefined, transition }}><Card task={task} onSaved={onSaved} onCompleted={onCompleted} zoom={zoom} /><button ref={setActivatorNodeRef} {...attributes} {...listeners} className="trello-grip" aria-label={`Drag ${task.title}`} title="Drag card"><Icon name="grip" size={20} /></button></div>
 }
 
 function List({ list, cards, plannedDate, lists, onSaved, onCompleted, zoom }: { list: BoardList; cards: Task[]; plannedDate: string; lists: BoardList[]; onSaved?: (task: Task) => void; onCompleted: (task: Task) => void; zoom: number }) {
@@ -53,12 +57,15 @@ function List({ list, cards, plannedDate, lists, onSaved, onCompleted, zoom }: {
   </section>
 }
 
+function CanvasDragCard({ task }: { task: Task }) { const scale = useCanvasScale(); return <Card task={task} preview zoom={scale} /> }
+
 export function TrelloBoard({ tasks, plannedDate, onSaved, zoom = 1 }: { tasks: Task[]; plannedDate: string; onSaved?: (task: Task) => void; zoom?: number }) {
   const projects = useStore(state => state.projects)
   const projectId = useStore(state => state.activeProjectId)
   const allTasks = useStore(state => state.tasks)
   const updateProject = useStore(state => state.updateProject)
   const updateTask = useStore(state => state.updateTask)
+  const setTaskZoom = useStore(state => state.setTaskZoom)
   const project = projects.find(p => p.id === projectId)
   const lists = boardLists(project)
   const root = useRef<HTMLDivElement>(null)
@@ -83,7 +90,7 @@ export function TrelloBoard({ tasks, plannedDate, onSaved, zoom = 1 }: { tasks: 
   const [addingList, setAddingList] = useState(false)
   const [archive, setArchive] = useState(false)
   const [announcement, setAnnouncement] = useState('')
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 5 } }), useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const collision: CollisionDetection = args => { if (!args.pointerCoordinates) return closestCenter(args); const hits = pointerWithin(args); const cards = hits.filter(hit => !lists.some(list => list.id === hit.id)); return cards.length ? closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => cards.some(hit => hit.id === c.id)) }) : hits }
   const finish = ({ active, over }: DragEndEvent) => {
     if (over && active.id !== over.id) {
@@ -98,9 +105,9 @@ export function TrelloBoard({ tasks, plannedDate, onSaved, zoom = 1 }: { tasks: 
   const boardCards = allTasks.filter(task => task.projectId === projectId && !task.archived)
   const doneCount = boardCards.filter(task => task.status === 'done').length
   const progress = boardCards.length ? Math.round(doneCount / boardCards.length * 100) : 0
-  return <div ref={root} tabIndex={-1} aria-label={`${project?.name ?? 'Your'} board`} style={{ '--task-scale': zoom } as CSSProperties} className={`trello-board-shell board-${project?.background ?? 'blue'} ${focus ? 'board-focus' : ''}`}><div className="trello-board-top"><div><h2>{project?.name ?? 'Your board'}</h2><span>Private board · Personal workspace</span><div className="board-progress-summary"><span>{boardCards.length} cards</span><span>{doneCount} completed</span><span>{progress}% complete</span><div className="board-progress-track" role="progressbar" aria-label="Board completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><div style={{ width: `${progress}%` }} /></div></div></div><div className="board-top-actions"><div style={{ zoom: 1 / zoom }}><TaskZoomControls /></div><button type="button" onClick={() => setFocus(!focus)} aria-pressed={focus}>{focus ? 'Exit focus' : 'Focus mode'}</button><button type="button" onClick={() => setBackup(true)}>Backup</button><Select label="Board background" value={project?.background ?? 'blue'} onChange={background => updateProject(projectId, { background })} options={[{ value: 'blue', label: 'Ocean blue' }, { value: 'purple', label: 'Twilight' }, { value: 'green', label: 'Forest' }, { value: 'rose', label: 'Sunset' }]} /><button type="button" disabled={!doneCount} onClick={() => { const cards = useStore.getState().archiveCompleted(projectId); setNotice({ message: `Archived ${cards.length} completed card${cards.length === 1 ? '' : 's'}`, undo: () => { const ids = new Set(cards.map(card => card.id)); useStore.setState(state => ({ tasks: state.tasks.map(task => ids.has(task.id) ? { ...task, archived: false, updatedAt: new Date().toISOString() } : task) })) } }) }}>Archive completed</button><button onClick={() => setArchive(true)}>Archive {archived.length > 0 ? `(${archived.length})` : ''}</button></div></div>
+  return <div ref={root} tabIndex={-1} aria-label={`${project?.name ?? 'Your'} board`} style={{ '--task-scale': 1 } as CSSProperties} className={`trello-board-shell board-${project?.background ?? 'blue'} ${focus ? 'board-focus' : ''}`}><div className="trello-board-top"><div><h2>{project?.name ?? 'Your board'}</h2><span>Private board · Personal workspace</span><div className="board-progress-summary"><span>{boardCards.length} cards</span><span>{doneCount} completed</span><span>{progress}% complete</span><div className="board-progress-track" role="progressbar" aria-label="Board completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><div style={{ width: `${progress}%` }} /></div></div></div><div className="board-top-actions"><button type="button" onClick={() => setFocus(!focus)} aria-pressed={focus}>{focus ? 'Exit focus' : 'Focus mode'}</button><button type="button" onClick={() => setBackup(true)}>Backup</button><Select label="Board background" value={project?.background ?? 'blue'} onChange={background => updateProject(projectId, { background })} options={[{ value: 'blue', label: 'Ocean blue' }, { value: 'purple', label: 'Twilight' }, { value: 'green', label: 'Forest' }, { value: 'rose', label: 'Sunset' }]} /><button type="button" disabled={!doneCount} onClick={() => { const cards = useStore.getState().archiveCompleted(projectId); setNotice({ message: `Archived ${cards.length} completed card${cards.length === 1 ? '' : 's'}`, undo: () => { const ids = new Set(cards.map(card => card.id)); useStore.setState(state => ({ tasks: state.tasks.map(task => ids.has(task.id) ? { ...task, archived: false, updatedAt: new Date().toISOString() } : task) })) } }) }}>Archive completed</button><button onClick={() => setArchive(true)}>Archive {archived.length > 0 ? `(${archived.length})` : ''}</button></div></div>
     {notice && <div className="board-notice" role="status"><span>{notice.message}</span><button type="button" onClick={() => { notice.undo(); setNotice(null) }}>Undo</button><button type="button" aria-label="Dismiss notification" onClick={() => setNotice(null)}>×</button></div>}
-    <p className="sr-only" role="status">{announcement}</p><DndContext sensors={sensors} collisionDetection={collision} onDragStart={({ active }) => setActiveId(String(active.id))} onDragCancel={() => setActiveId(null)} onDragEnd={finish}><div className="trello-lists">{lists.map(list => <List key={list.id} list={list} lists={lists} cards={orderedCards(tasks.filter(task => taskListId(task, lists) === list.id))} plannedDate={plannedDate} onSaved={onSaved} onCompleted={completed} zoom={zoom} />)}<div className="add-list-panel">{addingList ? <form onSubmit={e => { e.preventDefault(); if (!newList.trim()) return; updateProject(projectId, { lists: [...lists, { id: uid(), title: newList.trim(), status: 'todo' }] }); setNewList(''); setAddingList(false) }}><input autoFocus aria-label="New list name" placeholder="Enter list name…" value={newList} onChange={e => setNewList(e.target.value)} /><button className="trello-primary" disabled={!newList.trim()}>Add list</button><button type="button" onClick={() => setAddingList(false)} aria-label="Cancel new list">×</button></form> : <button onClick={() => setAddingList(true)}>＋ Add another list</button>}</div></div>{createPortal(<DragOverlay dropAnimation={window.matchMedia('(prefers-reduced-motion: reduce)').matches ? null : { duration: 200, easing: 'ease-out' }}>{active ? <Card task={active} preview zoom={zoom} /> : null}</DragOverlay>, document.body)}</DndContext>
+    <p className="sr-only" role="status">{announcement}</p><BoardCanvas zoom={zoom} onZoomChange={setTaskZoom} disabled={!!activeId}><CanvasDndContext sensors={sensors} collisionDetection={collision} onDragStart={({ active }) => setActiveId(String(active.id))} onDragCancel={() => setActiveId(null)} onDragEnd={finish}><div className="trello-lists">{lists.map(list => <List key={list.id} list={list} lists={lists} cards={orderedCards(tasks.filter(task => taskListId(task, lists) === list.id))} plannedDate={plannedDate} onSaved={onSaved} onCompleted={completed} zoom={1} />)}<div className="add-list-panel">{addingList ? <form onSubmit={e => { e.preventDefault(); if (!newList.trim()) return; updateProject(projectId, { lists: [...lists, { id: uid(), title: newList.trim(), status: 'todo' }] }); setNewList(''); setAddingList(false) }}><input autoFocus aria-label="New list name" placeholder="Enter list name…" value={newList} onChange={e => setNewList(e.target.value)} /><button className="trello-primary" disabled={!newList.trim()}>Add list</button><button type="button" onClick={() => setAddingList(false)} aria-label="Cancel new list">×</button></form> : <button onClick={() => setAddingList(true)}>＋ Add another list</button>}</div></div>{createPortal(<DragOverlay dropAnimation={window.matchMedia('(prefers-reduced-motion: reduce)').matches ? null : { duration: 200, easing: 'ease-out' }}>{active ? <CanvasDragCard task={active} /> : null}</DragOverlay>, document.body)}</CanvasDndContext></BoardCanvas>
     {backup && <WorkspaceBackup onClose={() => setBackup(false)} />}
     {archive && <Modal title="Archived cards" subtitle="Restore a card whenever you need it again." onClose={() => setArchive(false)}><div className="modal-body">{archived.length ? archived.map(task => <div className="archived-row" key={task.id}><span>{task.title}</span><button className="secondary-action" onClick={() => { updateTask(task.id, { archived: false }); const restored = useStore.getState().tasks.find(item => item.id === task.id); if (restored) onSaved?.(restored) }}>Restore</button></div>) : <p className="muted">No archived cards.</p>}</div></Modal>}
   </div>

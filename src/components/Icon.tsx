@@ -9,6 +9,8 @@ export function Icon({ name, size = 20, style }: { name: string; size?: number; 
     notes: 'M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9z M14 2v7h7 M7 13h10 M7 17h7',
     plus: 'M12 5v14 M5 12h14',
     minus: 'M5 12h14',
+    fit: 'M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5 M8 8h8v8H8z',
+    reset: 'M3 10a9 9 0 1 1 2 8 M3 3v7h7',
     menu: 'M4 6h16 M4 12h16 M4 18h16',
     moon: 'M21 13a9 9 0 1 1-10-10 7 7 0 0 0 10 10z',
     sun: 'M12 3v1 M12 20v1 M3 12h1 M20 12h1 M5.6 5.6l.7.7 M17.7 17.7l.7.7 M5.6 18.4l.7-.7 M17.7 6.3l.7-.7 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
