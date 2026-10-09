@@ -25,6 +25,7 @@ function isBackground(target: EventTarget | null): boolean {
 }
 
 export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: { children: ReactNode; zoom: number; onZoomChange: (percent: number) => void; disabled?: boolean }) {
+  const frameScale = useCanvasScale()
   const viewport = useRef<HTMLDivElement>(null)
   const world = useRef<HTMLDivElement>(null)
   const hintId = useId()
@@ -96,7 +97,7 @@ export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: 
       if (disabled) return
       const rect = node.getBoundingClientRect()
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? node.clientHeight : 1)
-      applyScale(scaleRef.current * Math.exp(-Math.max(-240, Math.min(240, delta)) * .002), { x: event.clientX - rect.left, y: event.clientY - rect.top })
+      applyScale(scaleRef.current * Math.exp(-Math.max(-240, Math.min(240, delta)) * .002), { x: (event.clientX - rect.left) / frameScale, y: (event.clientY - rect.top) / frameScale })
       if (wheelSave.current) clearTimeout(wheelSave.current)
       wheelSave.current = setTimeout(() => { commit.current(scaleRef.current * 100); wheelSave.current = null }, 180)
     }
@@ -108,7 +109,7 @@ export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: 
       node.removeEventListener('touchstart', touch)
       if (wheelSave.current) { clearTimeout(wheelSave.current); wheelSave.current = null; commit.current(scaleRef.current * 100) }
     }
-  }, [applyScale, disabled])
+  }, [applyScale, disabled, frameScale])
 
   // Limit drag-edge scrolling to real board content, rather than its blank buffer.
   useEffect(() => {
@@ -122,8 +123,8 @@ export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: 
         const rect = node.getBoundingClientRect()
         const edge = 60
         if (point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom) {
-          const x = point.x - rect.left
-          const y = point.y - rect.top
+          const x = (point.x - rect.left) / frameScale
+          const y = (point.y - rect.top) / frameScale
           const dx = x < edge ? -(edge - x) / 5 : x > node.clientWidth - edge ? (x - node.clientWidth + edge) / 5 : 0
           const dy = y < edge ? -(edge - y) / 5 : y > node.clientHeight - edge ? (y - node.clientHeight + edge) / 5 : 0
           const minX = origin.current.x - CANVAS_PADDING
@@ -139,11 +140,11 @@ export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: 
     document.addEventListener('pointermove', track)
     frame = requestAnimationFrame(tick)
     return () => { document.removeEventListener('pointermove', track); cancelAnimationFrame(frame) }
-  }, [disabled, size])
+  }, [disabled, size, frameScale])
 
   const pointerPoint = (event: PointerEvent<HTMLDivElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect()
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    return { x: (event.clientX - rect.left) / frameScale, y: (event.clientY - rect.top) / frameScale }
   }
   const startPan = (event: PointerEvent<HTMLDivElement>) => {
     if (disabled || (event.pointerType === 'mouse' && event.button !== 0) || !isBackground(event.target)) return
@@ -203,7 +204,7 @@ export function BoardCanvas({ children, zoom, onZoomChange, disabled = false }: 
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); event.currentTarget.scrollBy({ left: event.key === 'ArrowLeft' ? -80 : event.key === 'ArrowRight' ? 80 : 0, top: event.key === 'ArrowUp' ? -80 : event.key === 'ArrowDown' ? 80 : 0 }) }
     }}>
       <div className="board-canvas-spacer" style={{ width: Math.max(1, size.width * scale + (viewportSize.width + CANVAS_PADDING) * 2), height: Math.max(1, size.height * scale + (viewportSize.height + CANVAS_PADDING) * 2) }}>
-        <div ref={world} className="board-canvas-world" style={{ left: viewportSize.width + CANVAS_PADDING, top: viewportSize.height + CANVAS_PADDING, transform: `scale(${scale})` }}><CanvasScale value={scale}>{children}</CanvasScale></div>
+        <div ref={world} className="board-canvas-world" style={{ left: viewportSize.width + CANVAS_PADDING, top: viewportSize.height + CANVAS_PADDING, transform: `scale(${scale})` }}><CanvasScale value={scale * frameScale}>{children}</CanvasScale></div>
       </div>
     </div>
     <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">

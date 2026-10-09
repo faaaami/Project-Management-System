@@ -136,3 +136,76 @@ test.describe('touch canvas', () => {
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('devboard-storage')!).state.taskZoom)).toBe(200)
   })
 })
+
+for (const size of [50, 150]) test(`entire board resizes to ${size}% and preserves card editing and dragging`, async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await openBoard(page)
+  const shell = page.locator('.trello-board-shell')
+  const original = (await shell.boundingBox())!
+  const originalCard = (await page.locator('.trello-card').first().boundingBox())!
+  const originalTitle = (await page.locator('.trello-board-top h2').boundingBox())!
+  const action = page.getByRole('button', { name: size === 50 ? 'Make entire board smaller' : 'Make entire board bigger', exact: true })
+  await action.click()
+  await action.click()
+  await expect(page.getByLabel('Board size percentage')).toHaveText(`${size}%`)
+  const resized = (await shell.boundingBox())!
+  const resizedCard = (await page.locator('.trello-card').first().boundingBox())!
+  const resizedTitle = (await page.locator('.trello-board-top h2').boundingBox())!
+  expect(resized.width).toBeCloseTo(original.width * size / 100, 0)
+  expect(resized.height).toBeCloseTo(original.height * size / 100, 0)
+  expect(resizedCard.width).toBeCloseTo(originalCard.width * size / 100, 0)
+  expect(resizedTitle.height).toBeCloseTo(originalTitle.height * size / 100, 0)
+  await page.reload()
+  await expect(page.getByLabel('Board size percentage')).toHaveText(`${size}%`)
+  await page.getByRole('button', { name: 'Drag Card a', exact: true }).hover()
+  const grip = (await page.getByRole('button', { name: 'Drag Card a', exact: true }).boundingBox())!
+  const target = (await page.locator('.trello-sortable').filter({ has: page.getByRole('button', { name: 'Card b', exact: true }) }).boundingBox())!
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(target.x + 30, target.y + target.height / 2, { steps: 14 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('devboard-storage')!).state.tasks.find((card: { id: string }) => card.id === 'a').listId)).toBe('doing')
+  await expect(page.locator('.trello-card-overlay')).toHaveCount(0)
+  const cardTitle = (await shell.getByRole('button', { name: 'Card a', exact: true }).boundingBox())!
+  await page.mouse.click(cardTitle.x + 20, cardTitle.y + cardTitle.height / 2)
+  await expect(page.getByRole('dialog', { name: 'Card details', exact: true })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Priority', exact: true }).click()
+  await page.getByRole('option', { name: 'Urgent', exact: true }).click()
+  await page.getByRole('button', { name: 'Save changes' }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('devboard-storage')!).state.tasks.find((card: { id: string }) => card.id === 'a').priority)).toBe('urgent')
+  expect(errors).toEqual([])
+  const viewportAfterEdit = (await page.locator('.board-canvas-viewport').boundingBox())!
+  const worldAfterEdit = (await page.locator('.board-canvas-world').boundingBox())!
+  expect(worldAfterEdit.x - viewportAfterEdit.x).toBeCloseTo(32 * size / 100, 0)
+  expect(worldAfterEdit.y - viewportAfterEdit.y).toBeCloseTo(32 * size / 100, 0)
+  await page.screenshot({ path: `test-results/board-size-${size}.png`, fullPage: true })
+  await page.getByRole('button', { name: 'Reset size', exact: true }).click()
+  await expect(page.getByLabel('Board size percentage')).toHaveText('100%')
+})
+
+test('background panning and wheel zoom respect a resized board', async ({ page }) => {
+  await openBoard(page)
+  await page.getByRole('slider', { name: 'Entire board size' }).focus()
+  await page.keyboard.press('Home')
+  await expect(page.getByLabel('Board size percentage')).toHaveText('50%')
+  const viewport = page.locator('.board-canvas-viewport')
+  const rect = (await viewport.boundingBox())!
+  const world = page.locator('.board-canvas-world')
+  const before = (await world.boundingBox())!
+  const point = { x: rect.x + 180, y: rect.y + rect.height - 40 }
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.down()
+  await page.mouse.move(point.x + 60, point.y - 25, { steps: 10 })
+  await page.mouse.up()
+  const panned = (await world.boundingBox())!
+  expect(panned.x - before.x).toBeCloseTo(60, 0)
+  expect(panned.y - before.y).toBeCloseTo(-25, 0)
+  await page.mouse.move(point.x, point.y)
+  await page.mouse.wheel(0, -100)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('devboard-storage')!).state.taskZoom)).toBe(122)
+  const after = (await world.boundingBox())!
+  const scale = after.width / panned.width
+  expect(Math.abs(after.x + (point.x - panned.x) * scale - point.x)).toBeLessThan(1)
+  expect(Math.abs(after.y + (point.y - panned.y) * scale - point.y)).toBeLessThan(1)
+})

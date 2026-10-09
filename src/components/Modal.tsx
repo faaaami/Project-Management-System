@@ -9,7 +9,7 @@ export function Modal({ title, subtitle, children, onClose }: { title: string; s
     const dialog = ref.current
     const previous = document.activeElement as HTMLElement | null
     dialog?.showModal()
-    return () => { dialog?.close(); previous?.focus() }
+    return () => { dialog?.close(); previous?.focus({ preventScroll: true }) }
   }, [])
   return createPortal(<dialog ref={ref} className="app-modal" aria-labelledby={id} onCancel={event => { event.preventDefault(); onClose() }} onClick={event => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) onClose() } }}><div className="modal-heading"><div><h2 id={id}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>×</button></div>{children}</dialog>, document.body)
 }

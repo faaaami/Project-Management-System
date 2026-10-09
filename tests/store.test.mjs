@@ -128,6 +128,27 @@ test('task zoom stays within readable bounds and resets to normal size', () => {
   assert.equal(useStore.getState().taskZoom, 100)
 })
 
+test('whole-board size persists independently from canvas zoom and task content', async () => {
+  reset()
+  const card = useStore.getState().addTask({ title: 'Keep this task' })
+  useStore.getState().setTaskZoom(120)
+  useStore.getState().setBoardSize(50)
+  const snapshot = JSON.parse(storage.get(STORAGE_KEY))
+  assert.equal(snapshot.state.boardSize, 50)
+  useStore.getState().setBoardSize(150)
+  storage.set(STORAGE_KEY, JSON.stringify(snapshot))
+  await useStore.persist.rehydrate()
+  assert.equal(useStore.getState().boardSize, 50)
+  assert.equal(useStore.getState().taskZoom, 120)
+  assert.deepEqual(useStore.getState().tasks, [card])
+  useStore.getState().setBoardSize(-1)
+  assert.equal(useStore.getState().boardSize, 50)
+  useStore.getState().setBoardSize(500)
+  assert.equal(useStore.getState().boardSize, 150)
+  useStore.getState().setBoardSize(Number.NaN)
+  assert.equal(useStore.getState().boardSize, 100)
+})
+
 test('one-click completion creates a Done list when needed and reopening moves to To do', () => {
   reset()
   const card = useStore.getState().addTask({ title: 'Ship it', listId: 'work' })

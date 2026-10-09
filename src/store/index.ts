@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { localDateKey } from '../lib/tasks'
 import { boardLists, moveCard, nextCardOrder, taskListId } from '../lib/board'
 import { copyWorkspaceBackup, parseWorkspaceBackup } from '../lib/backup'
-import { normalizeTaskZoom } from '../lib/zoom'
+import { normalizeBoardSize, normalizeTaskZoom } from '../lib/zoom'
 import type {
   Note,
   Project,
@@ -40,6 +40,7 @@ export interface DevBoardState {
   activeProjectId: string
   theme: Theme
   taskZoom: number
+  boardSize: number
 
   // Projects
   addProject: (name: string, modules?: string[]) => Project
@@ -73,6 +74,7 @@ export interface DevBoardState {
   setTheme: (theme: Theme) => void
   toggleTheme: () => void
   setTaskZoom: (zoom: number) => void
+  setBoardSize: (size: number) => void
   resetToSeed: () => void
 }
 
@@ -85,6 +87,7 @@ const seedState = () => ({
   activeProjectId: SEED_PROJECT_ID,
   theme: 'dark' as Theme,
   taskZoom: 100,
+  boardSize: 100,
 })
 
 const normalizeSubtasks = (subtasks: SubtaskInput[]): Subtask[] =>
@@ -325,6 +328,7 @@ export const useStore = create<DevBoardState>()(
         set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
 
       setTaskZoom: (zoom) => set({ taskZoom: normalizeTaskZoom(zoom) }),
+      setBoardSize: (size) => set({ boardSize: normalizeBoardSize(size) }),
 
       resetToSeed: () => set({ ...seedState() }),
     }),
@@ -341,6 +345,7 @@ export const useStore = create<DevBoardState>()(
         activeProjectId: state.activeProjectId,
         theme: state.theme,
         taskZoom: state.taskZoom,
+        boardSize: state.boardSize,
       }),
       migrate: (persistedState, version) => {
         const state = persistedState as Partial<DevBoardState>
